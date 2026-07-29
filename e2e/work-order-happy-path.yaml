@@ -1,0 +1,64 @@
+appId: com.tradease.app
+name: Work Order Happy Path
+
+---
+# Preconditions:
+#   - Logged in as a contractor with an accepted booking
+#   - Booking ID seeded in MAESTRO_BOOKING_ID env var
+#   - Customer account available in MAESTRO_CUSTOMER_EMAIL
+
+- launchApp
+
+# ── Contractor side ───────────────────────────────────────────────────────────
+
+- tapOn: "Jobs"
+- assertVisible: "Start Driving"
+- tapOn: "Start Driving"
+
+# Should see en_route state
+- assertVisible: "Route Overview"
+- assertVisible: "I've Arrived"
+
+# Contractor arrives
+- tapOn: "I've Arrived"
+- assertVisible: "Start Job"
+
+# Start work
+- tapOn: "Start Job"
+- assertVisible: "Complete Job"
+
+# Add a checklist item
+- tapOn: "Checklist"
+- tapOn:
+    id: "add-item-input"
+- inputText: "Check pressure relief valve"
+- tapOn: "Add checklist item"
+- assertVisible: "Check pressure relief valve"
+
+# Mark item done
+- tapOn: "Check pressure relief valve"
+- assertVisible:
+    text: "1/1"
+
+# Add a change order
+- tapOn: "The Check"
+- tapOn: "Add Work / Change Order"
+- tapOn:
+    id: "change-order-desc"
+- inputText: "Extra filter replacement needed"
+- tapOn: "Material"
+- tapOn:
+    id: "unit-price"
+- inputText: "45"
+- tapOn: "Request Approval"
+
+# Upload a before photo
+- tapOn: "Photos"
+- tapOn: "Add Before Photo"
+# Camera permission dialog
+- tapOn: "OK"
+- tapOn: "Camera"
+
+# Mark job complete
+- tapOn: "Complete Job"
+- assertVisible: "Sent to Customer"

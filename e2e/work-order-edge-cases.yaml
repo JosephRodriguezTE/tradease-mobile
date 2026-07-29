@@ -1,0 +1,72 @@
+appId: com.tradease.app
+name: Work Order Edge Cases
+
+---
+
+# ── Change order rejected ─────────────────────────────────────────────────────
+- name: Change order rejected flow
+  steps:
+    # Customer rejects a pending change order
+    - launchApp
+    - tapOn: "Jobs"
+    - tapOn: "View Job"
+    - tapOn: "The Check"
+    - assertVisible: "Approve"
+    - assertVisible: "Reject"
+    - tapOn: "Reject"
+    - tapOn: "Reject"
+    # Contractor sees item marked rejected
+    - assertVisible: "Rejected"
+    - assertNotVisible: "Awaiting approval"
+
+# ── Location permission denied (en_route works, map shows unavailable) ────────
+- name: Location permission denied
+  steps:
+    - launchApp
+    # Deny location when prompted
+    - tapOn: "Start Driving"
+    - tapOn: "Don't Allow"
+    # Map section should show unavailable message, not crash
+    - assertVisible: "Route Overview"
+    - tapOn: "Route Overview"
+    - assertVisible: "location"
+    # Primary action button still works
+    - assertVisible: "I've Arrived"
+
+# ── Dispute raised ────────────────────────────────────────────────────────────
+- name: Customer raises dispute
+  steps:
+    - launchApp
+    - tapOn: "Jobs"
+    - tapOn: "View Job"
+    # Job must be in awaiting_approval state
+    - tapOn: "Help & Support"
+    - assertVisible: "Open Dispute"
+    - tapOn: "Open Dispute"
+    - assertVisible: "Dispute"
+    - tapOn: "Pricing dispute"
+    - tapOn: "Submit"
+    - assertVisible: "disputed"
+
+# ── Offline checklist ─────────────────────────────────────────────────────────
+- name: Offline optimistic checklist
+  steps:
+    - launchApp
+    - setNetworkConditions:
+        offline: true
+    - tapOn: "Jobs"
+    - tapOn: "Start Job"
+    - tapOn: "Checklist"
+    - tapOn:
+        id: "add-item-input"
+    - inputText: "Offline task"
+    - tapOn: "Add checklist item"
+    # Should appear immediately (optimistic)
+    - assertVisible: "Offline task"
+    # Toast should appear
+    - assertVisible: "Saved offline"
+    # Restore and verify sync
+    - setNetworkConditions:
+        offline: false
+    - runScript: "await new Promise(r => setTimeout(r, 3000));"
+    - assertVisible: "Offline task"
