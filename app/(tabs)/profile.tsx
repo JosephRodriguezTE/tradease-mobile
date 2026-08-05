@@ -1083,6 +1083,21 @@ function CustomerProfileView({ profile, bookingStats }: { profile: any; bookingS
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>ACCOUNT</Text>
         <View style={styles.menuCard}>
+          {(user?.email_confirmed_at && user?.phone_confirmed_at)
+            ? <MenuItem
+                icon="✅"
+                label="Verified"
+                subtitle="Phone and email confirmed"
+                onPress={() => router.push('/profile/verify-account' as any)}
+              />
+            : <MenuItem
+                icon="✅"
+                label="Get Verified"
+                subtitle="Confirm your phone and email"
+                onPress={() => router.push('/profile/verify-account' as any)}
+              />
+          }
+          <View style={styles.menuDivider} />
           <MenuItem icon="👤" label="Personal Information"  onPress={() => router.push('/profile/personal-info')} />
           <View style={styles.menuDivider} />
           <MenuItem icon="🔔" label="Notifications"         onPress={() => router.push('/profile/notifications')} />

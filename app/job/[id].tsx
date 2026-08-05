@@ -219,6 +219,7 @@ export default function JobDetailScreen() {
   const [offerSaving,        setOfferSaving]        = useState(false);
   const [cancelSaving,       setCancelSaving]       = useState(false);
   const [cancelPolicyOpen,   setCancelPolicyOpen]   = useState(false);
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -389,71 +390,74 @@ export default function JobDetailScreen() {
 
   const CANCELABLE = ['pending', 'accepted', 'confirmed', 'in_progress'];
 
-  function getCancelInfo() {
-    if (!booking) return null;
-    if (isAdmin) return { isFree: true, feeAmount: 0, feeRecipient: null as string | null };
-    const ageDays = (Date.now() - new Date(booking.created_at).getTime()) / 86400000;
-    if (ageDays < 3) return { isFree: true, feeAmount: 0, feeRecipient: null as string | null };
-    if (booking.status === 'pending') return { isFree: true, feeAmount: 0, feeRecipient: null as string | null };
-    if (!booking.scheduled_at) return { isFree: true, feeAmount: 0, feeRecipient: null as string | null };
-    const hoursUntil = (new Date(booking.scheduled_at).getTime() - Date.now()) / 3600000;
-    if (hoursUntil > 24) return { isFree: true, feeAmount: 0, feeRecipient: null as string | null };
-    return { isFree: false, feeAmount: 50, feeRecipient: 'contractor' as string };
+  // A contractor's quote is only "confirmed" once contractor_id gets set on
+  // the booking (happens at quote-acceptance time) — before that, cancelling
+  // is free. cancel_booking() enforces this same rule server-side; this is
+  // just for the pre-confirmation preview text.
+  function getCancelPreview() {
+    if (!booking) return { isFree: true, feeAmount: 0 };
+    if (booking.contractor_id) return { isFree: false, feeAmount: 30 };
+    return { isFree: true, feeAmount: 0 };
   }
 
-  async function handleCancel() {
+  // Admin "Delete" keeps its own direct-update path — cancel_booking() only
+  // authorizes the booking's own customer/contractor, not admins.
+  async function handleAdminDelete() {
     if (!booking) return;
-    const info = getCancelInfo();
-    if (!info) return;
-    if (!isAdmin && !CANCELABLE.includes(booking.status)) return;
-
-    const title = isAdmin ? 'Delete Job' : 'Cancel Job';
-    const feeMsg = info.isFree
-      ? 'No cancellation fee applies.'
-      : `A $${info.feeAmount} cancellation fee will be recorded (charged when billing activates).`;
-    const msg = isAdmin
-      ? 'Permanently delete this job? This cannot be undone.'
-      : `${feeMsg}\n\nAre you sure you want to cancel?`;
-
-    Alert.alert(title, msg, [
-      { text: isAdmin ? 'Keep' : 'Keep Job', style: 'cancel' },
+    Alert.alert('Delete Job', 'Permanently delete this job? This cannot be undone.', [
+      { text: 'Keep', style: 'cancel' },
       {
-        text: isAdmin ? 'Delete' : 'Cancel Job',
+        text: 'Delete',
         style: 'destructive',
         onPress: async () => {
           setCancelSaving(true);
           try {
-            const updates: Record<string, any> = { status: 'cancelled' };
-            if (!info.isFree) {
-              updates.cancel_fee_amount    = info.feeAmount;
-              updates.cancel_fee_recipient = info.feeRecipient;
-              updates.cancel_fee_status    = 'pending_billing';
-            }
-            const { error } = await supabase.from('bookings').update(updates).eq('id', booking.id);
+            const { error } = await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', booking.id);
             if (error) throw error;
-
-            // Notify assigned contractor when customer cancels
-            if (!isAdmin && isCustomer && booking.contractor?.id) {
-              await supabase.from('notifications').insert({
-                user_id: booking.contractor.id,
-                type:    'booking_cancelled',
-                title:   'Job Cancelled',
-                message: `A customer cancelled their ${booking.trade ?? 'job'} booking.`,
-                data:    { booking_id: booking.id },
-              });
-            }
-
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             setBooking((p: any) => ({ ...p, status: 'cancelled' }));
             router.canGoBack() ? router.back() : router.replace('/(tabs)');
           } catch (err: any) {
-            Alert.alert('Error', err.message ?? 'Could not cancel job. Try again.');
+            Alert.alert('Error', err.message ?? 'Could not delete job. Try again.');
           } finally {
             setCancelSaving(false);
           }
         },
       },
     ]);
+  }
+
+  async function confirmCancel() {
+    if (!booking) return;
+    setCancelSaving(true);
+    try {
+      const { data, error } = await supabase.rpc('cancel_booking', {
+        p_booking_id: booking.id,
+        p_reason: 'customer_cancelled',
+      });
+      if (error) throw error;
+
+      // Notify assigned contractor when customer cancels
+      if (booking.contractor?.id) {
+        await supabase.from('notifications').insert({
+          user_id: booking.contractor.id,
+          type:    'booking_cancelled',
+          title:   'Job Cancelled',
+          message: `A customer cancelled their ${booking.trade ?? 'job'} booking.`,
+          data:    { booking_id: booking.id },
+        });
+      }
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setCancelModalVisible(false);
+      setBooking((p: any) => ({ ...p, ...data, status: 'cancelled' }));
+      router.canGoBack() ? router.back() : router.replace('/(tabs)');
+    } catch (err: any) {
+      setCancelModalVisible(false);
+      Alert.alert('Error', err.message ?? 'Could not cancel job. Try again.');
+    } finally {
+      setCancelSaving(false);
+    }
   }
 
   const s = makeStyles(C);
@@ -733,11 +737,8 @@ export default function JobDetailScreen() {
               {cancelPolicyOpen ? (
                 <View style={{ marginTop: 6, gap: 5 }}>
                   {[
-                    'Before contractor accepts → Free',
-                    'After accepted, > 24h before job → Free',
-                    'Within 24h of job start → $50 fee',
-                    'Booked < 3 days ago → Always free',
-                    'Contractor cancels within 24h → You get a free-job coupon',
+                    'Before you confirm a contractor\'s quote → Free',
+                    'After you confirm a contractor\'s quote → $30 fee, paid to the contractor',
                   ].map((line, i) => (
                     <Text key={i} style={[s.noticeSub, { color: C.textSecondary }]}>· {line}</Text>
                   ))}
@@ -822,6 +823,46 @@ export default function JobDetailScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* Cancel confirmation modal */}
+      <Modal visible={cancelModalVisible} transparent animationType="slide" onRequestClose={() => setCancelModalVisible(false)}>
+        <View style={s.modalOverlay}>
+          <TouchableOpacity style={s.modalBackdrop} onPress={() => setCancelModalVisible(false)} activeOpacity={1} />
+          <View style={s.modalSheet}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalTitle}>Cancel this job?</Text>
+            {getCancelPreview().isFree ? (
+              <Text style={[s.modalSub, { color: C.textSecondary }]}>
+                No cancellation fee applies — you haven't confirmed a contractor's quote yet.
+              </Text>
+            ) : (
+              <Text style={[s.modalSub, { color: '#F59E0B' }]}>
+                A $30 cancellation fee will apply, paid to your contractor. It's recorded now and billed once payments are live.
+              </Text>
+            )}
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#2A2A38', borderRadius: 14, paddingVertical: 15, alignItems: 'center', justifyContent: 'center' }}
+                onPress={() => setCancelModalVisible(false)}
+                disabled={cancelSaving}
+              >
+                <Text style={{ fontSize: 15, fontWeight: Font.bold, color: '#F0F0F5' }}>Keep Job</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: 'rgba(239,68,68,0.12)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.35)', borderRadius: 14, paddingVertical: 15, alignItems: 'center', justifyContent: 'center', opacity: cancelSaving ? 0.6 : 1 }}
+                onPress={confirmCancel}
+                disabled={cancelSaving}
+              >
+                {cancelSaving
+                  ? <ActivityIndicator color="#EF4444" />
+                  : <Text style={{ fontSize: 15, fontWeight: Font.black, color: '#EF4444' }}>Cancel Job</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Fixed bottom CTAs */}
       <SafeAreaView edges={['bottom']} style={{ backgroundColor: C.background }}>
         <View style={[s.ctaBar, { borderTopColor: C.border }]}>
@@ -874,7 +915,7 @@ export default function JobDetailScreen() {
           {isCustomer && !isAdmin && CANCELABLE.includes(booking.status) && (
             <TouchableOpacity
               style={[s.ctaBtn, s.ctaBtnCancel, cancelSaving && { opacity: 0.5 }]}
-              onPress={handleCancel}
+              onPress={() => setCancelModalVisible(true)}
               disabled={cancelSaving}
             >
               {cancelSaving
@@ -888,7 +929,7 @@ export default function JobDetailScreen() {
           {isAdmin && booking.status !== 'cancelled' && booking.status !== 'completed' && (
             <TouchableOpacity
               style={[s.ctaBtn, s.ctaBtnCancel, cancelSaving && { opacity: 0.5 }]}
-              onPress={handleCancel}
+              onPress={handleAdminDelete}
               disabled={cancelSaving}
             >
               {cancelSaving

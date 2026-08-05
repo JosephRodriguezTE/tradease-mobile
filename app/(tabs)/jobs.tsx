@@ -16,6 +16,7 @@ import ContractorJobFeed from './contractor-home';
 
 // ─── Status config ────────────────────────────────────────────────────────────
 const STATUS: Record<string, { color: string; label: string }> = {
+  draft:       { color: '#94A3B8', label: 'Draft'               },
   pending:     { color: '#FBBF24', label: 'Finding Contractor' },
   accepted:    { color: '#22C55E', label: 'Accepted'           },
   confirmed:   { color: '#22C55E', label: 'Confirmed'          },
@@ -33,13 +34,14 @@ const TRADE_EMOJI: Record<string, string> = {
   Mechanical: '⚙️', Cleaning: '🧹', 'General Contracting': '🏗️',
 };
 
-const FILTERS = ['All', 'Active', 'Completed', 'Cancelled'] as const;
+const FILTERS = ['All', 'Active', 'Draft', 'Completed', 'Cancelled'] as const;
 type Filter = typeof FILTERS[number];
 
 function matchesFilter(booking: any, f: Filter): boolean {
   const s = booking.status;
   if (f === 'All') return true;
   if (f === 'Active') return ['pending','accepted','confirmed','in_progress'].includes(s);
+  if (f === 'Draft') return s === 'draft';
   if (f === 'Completed') return ['completed','approved','paid'].includes(s);
   if (f === 'Cancelled') return ['cancelled','declined'].includes(s);
   return true;
@@ -337,7 +339,7 @@ function CustomerBookings() {
             <View style={{ flex: 1 }}>
               <Text style={[styles.policyTitle, { color: '#FBBF24' }]}>Cancellation Policy</Text>
               <Text style={[styles.policyBody, { color: C.textMuted }]}>
-                Free if no contractor yet · Free if {'>'} 24h before job · $50 fee within 24h · Always free if booked {'<'} 3 days ago
+                Free before you confirm a contractor's quote · $30 fee to the contractor after
               </Text>
             </View>
           </View>
@@ -346,7 +348,10 @@ function CustomerBookings() {
           <BookingCard
             booking={item}
             C={C}
-            onPress={() => router.push(`/job/${item.id}` as any)}
+            onPress={() => item.status === 'draft'
+              ? router.push(`/create-job?draftId=${item.id}&resume=1` as any)
+              : router.push(`/job/${item.id}` as any)
+            }
             isAdmin={isAdmin}
             onDelete={handleAdminDelete}
           />

@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { CalendarCheck, MapPinned, MessageCircle, User } from 'lucide-react-native';
+import { CalendarCheck, MapPinned, MessageCircle, Settings as SettingsIcon, User } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -107,6 +107,7 @@ export default function TabsLayout() {
         name="map"
         options={{
           title: 'Map',
+          href: isContractor ? undefined : null,
           tabBarIcon: ({ focused }) => <TabIcon Icon={MapPinned} focused={focused} />,
         }}
       />
@@ -117,7 +118,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="jobs"
         options={{
-          title: isContractor ? 'Jobs' : 'Bookings',
+          title: isContractor ? 'Jobs' : 'My Bookings',
           tabBarIcon: ({ focused }) => isContractor ? (
             <View style={[
               { width: 38, height: 30, alignItems: 'center' as const, justifyContent: 'center' as const, borderRadius: 9 },
@@ -134,6 +135,7 @@ export default function TabsLayout() {
         name="messages"
         options={{
           title: 'Messages',
+          href: isContractor ? undefined : null,
           tabBarIcon: ({ focused }) => <TabIcon Icon={MessageCircle} focused={focused} />,
           tabBarBadge: unreadCount > 0 ? (unreadCount > 9 ? '9+' : unreadCount) : undefined,
           tabBarBadgeStyle: { backgroundColor: '#EF4444', fontSize: 10 },
@@ -144,6 +146,14 @@ export default function TabsLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ focused }) => <TabIcon Icon={User} focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: 'Settings',
+          href: isContractor ? null : undefined,
+          tabBarIcon: ({ focused }) => <TabIcon Icon={SettingsIcon} focused={focused} />,
         }}
       />
     </Tabs>

@@ -11,6 +11,7 @@ import { Spacing } from '../../constants/Layout';
 import { Font, Radius } from '../../constants/theme';
 import { useTheme } from '@/context/ThemeContext';
 import { useRole } from '@/hooks/useRole';
+import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 import { supabase } from '../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { TradeaseLogo } from '../../components/TradeaseLogo';
@@ -61,15 +62,41 @@ function NotificationBell() {
   );
 }
 
+// ─── Messages bell (customer header only — Messages isn't a tab for them) ─────
+
+function MessagesBell() {
+  const { colors: Colors } = useTheme();
+  const router = useRouter();
+  const { unreadCount } = useUnreadMessages();
+
+  return (
+    <TouchableOpacity
+      style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center', position: 'relative', marginRight: 8 }}
+      onPress={() => router.push('/(tabs)/messages' as any)}
+      activeOpacity={0.7}
+    >
+      <Ionicons name="chatbubble-outline" size={19} color={Colors.textPrimary} strokeWidth={2} />
+      {unreadCount > 0 && (
+        <View style={{ position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: Colors.orange, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: Colors.background }}>
+          <Text style={{ fontSize: 9, fontWeight: Font.black, color: Colors.background }}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
+
 // ─── Shared header ────────────────────────────────────────────────────────────
 
-function AppHeader() {
+function AppHeader({ showMessages = false }: { showMessages?: boolean }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.md, paddingTop: 4 }}>
       <View style={{ flex: 1, alignItems: 'flex-start', marginLeft: -10 }}>
         <TradeaseLogo iconSize={40} fontSize={20} gap={-12} />
       </View>
-      <NotificationBell />
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        {showMessages && <MessagesBell />}
+        <NotificationBell />
+      </View>
     </View>
   );
 }
@@ -185,7 +212,7 @@ function CustomerHome() {
 
   return (
     <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-      <AppHeader />
+      <AppHeader showMessages />
 
       <View style={{ position: 'relative', height: 72, marginBottom: Spacing.lg }}>
         <Animated.Text style={[s.title, { position: 'absolute', top: 0, left: 0, right: 0, marginBottom: 0, fontSize: 28, fontWeight: '800', color: Colors.orange, opacity: welcomeOpacity }]}>
