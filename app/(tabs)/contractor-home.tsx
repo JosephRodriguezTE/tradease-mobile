@@ -9,6 +9,7 @@ import { useRole, EmployeeRecord } from '@/hooks/useRole';
 import { supabase } from '@/lib/supabase';
 import { deriveChatId } from '@/lib/messageService';
 import { startLiveTracking, stopLiveTracking } from '@/lib/locationService';
+import { haversine } from '@/lib/geo';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -53,15 +54,6 @@ interface Earnings {
 type Filter = 'all' | 'emergency' | 'high_pay' | 'nearby' | 'quick';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 3958.8;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 function timeAgo(dateStr: string): string {
   const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
@@ -952,11 +944,15 @@ export default function ContractorHomeScreen() {
 
   async function handleAcceptInstantBook(job: Job) {
     if (!contractor) return;
-    const { error } = await supabase.from('bookings').update({
+    const { data: claimed, error } = await supabase.from('bookings').update({
       contractor_id: contractor.id,
       status: 'confirmed',
-    }).eq('id', job.id);
+    }).eq('id', job.id).select();
     if (error) { Alert.alert('Error', 'Could not accept job. Try again.'); return; }
+    if (!claimed || claimed.length === 0) {
+      Alert.alert('Job Unavailable', 'This job was already accepted by another contractor.');
+      return;
+    }
     await supabase.from('work_orders').upsert({
       booking_id:      job.id,
       contractor_id:   contractor.id,

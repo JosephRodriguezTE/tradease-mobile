@@ -23,6 +23,7 @@ import { Colors, Font, Radius } from '../constants/theme';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
+import { haversine } from '../lib/geo';
 import {
   ALL_TRADES,
   PRICE_RANGES,
@@ -83,6 +84,7 @@ export default function CreateJobScreen() {
   const [instantBookPrice, setInstantBookPrice] = useState('');
 
   const [matchedContractors,  setMatchedContractors]  = useState<any[]>([]);
+  const [sortByNearest,       setSortByNearest]       = useState(false);
   const [specialtyPricing,    setSpecialtyPricing]    = useState<{ price_min: number; price_max: number; price_common: number; unit: string } | null>(null);
   const [areaContractorCount, setAreaContractorCount] = useState<number | null>(null);
   const [loadingContractors,  setLoadingContractors]  = useState(false);
@@ -134,7 +136,7 @@ export default function CreateJobScreen() {
       const [{ data: contractors }, { data: pricing }] = await Promise.all([
         supabase
           .from('contractors_public')
-          .select('id, company_name, avatar_url, rating, specializations, service_area')
+          .select('id, company_name, avatar_url, rating, specializations, service_area, lat, lng')
           .eq('verification_status', 'approved')
           .eq('is_available', true),
         supabase
@@ -235,6 +237,24 @@ export default function CreateJobScreen() {
       setDetectingLocation(false);
     }
   };
+
+  const toggleSortByNearest = async () => {
+    if (!sortByNearest && !detectedCoords) {
+      await detectLocation();
+    }
+    setSortByNearest(v => !v);
+  };
+
+  const sortedMatchedContractors = (sortByNearest && detectedCoords)
+    ? [...matchedContractors]
+        .map(c => ({
+          ...c,
+          distance_miles: (c.lat != null && c.lng != null)
+            ? haversine(detectedCoords.lat, detectedCoords.lng, c.lat, c.lng)
+            : null,
+        }))
+        .sort((a, b) => (a.distance_miles ?? Infinity) - (b.distance_miles ?? Infinity))
+    : matchedContractors;
 
   const pickImages = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -452,6 +472,10 @@ export default function CreateJobScreen() {
       }
 
       const ibPrice = isInstantBook ? parseInt(instantBookPrice.replace(/[^0-9]/g, ''), 10) : null;
+      // Drafts return earlier (line ~404-409) and never reach this payload.
+      // 'post' = public listing, 48h window. 'find' = direct request, 24h window.
+      const requestMode = action === 'post' ? 'post' : 'request';
+      const windowHours = action === 'post' ? 48 : 24;
       const bookingPayload = {
         customer_id:         freshUser.id,
         user_id:             freshUser.id,
@@ -471,6 +495,8 @@ export default function CreateJobScreen() {
         refund_status:       'none',
         is_instant_book:     isInstantBook,
         instant_book_price:  ibPrice,
+        request_mode:        requestMode,
+        request_expires_at:  new Date(Date.now() + windowHours * 60 * 60 * 1000).toISOString(),
         ...(photoUrls.length > 0 ? { photo_urls: photoUrls } : {}),
       };
 
@@ -590,9 +616,24 @@ export default function CreateJobScreen() {
                 </View>
               ) : matchedContractors.length > 0 ? (
                 <View>
-                  <Text style={styles.sectionLabel}>
-                    CONTRACTORS WHO SPECIALIZE IN THIS ({matchedContractors.length})
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={styles.sectionLabel}>
+                      CONTRACTORS WHO SPECIALIZE IN THIS ({matchedContractors.length})
+                    </Text>
+                    <TouchableOpacity
+                      onPress={toggleSortByNearest}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                    >
+                      <Text style={{ fontSize: 12, fontWeight: sortByNearest ? '700' : '500', color: sortByNearest ? Colors.orange : Colors.textMuted }}>
+                        {detectingLocation ? 'Locating…' : 'Sort by nearest'}
+                      </Text>
+                      <Switch
+                        value={sortByNearest}
+                        onValueChange={toggleSortByNearest}
+                        disabled={detectingLocation}
+                      />
+                    </TouchableOpacity>
+                  </View>
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
@@ -600,7 +641,7 @@ export default function CreateJobScreen() {
                     contentContainerStyle={{ gap: 10, paddingRight: 4 }}
                     nestedScrollEnabled
                   >
-                    {matchedContractors.map(c => {
+                    {sortedMatchedContractors.map(c => {
                       const initials = (c.company_name ?? 'C')
                         .split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
                       return (
@@ -617,6 +658,11 @@ export default function CreateJobScreen() {
                               <Text style={{ fontSize: 10, color: Colors.orange }}>★</Text>
                               <Text style={styles.contractorMiniRatingText}>{Number(c.rating).toFixed(1)}</Text>
                             </View>
+                          )}
+                          {sortByNearest && c.distance_miles != null && (
+                            <Text style={{ fontSize: 10, color: Colors.textMuted }}>
+                              {c.distance_miles.toFixed(1)} mi
+                            </Text>
                           )}
                           <TouchableOpacity
                             style={styles.contractorMiniViewBtn}
