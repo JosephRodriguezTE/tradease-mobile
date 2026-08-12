@@ -653,9 +653,10 @@ export default function ContractorHomeScreen() {
       setEarnings({ today: 0, this_week: 0, jobs_today: 0, jobs_this_week: 0 });
     }
 
-    // Open jobs — unassigned, pending, within 30 miles, request/post window not expired
+    // Open jobs — unassigned, pending, matching this contractor's trade,
+    // within 30 miles, request/post window not expired
     const nowIso = new Date().toISOString();
-    const { data: rawJobs } = await supabase
+    let openJobsQuery = supabase
       .from('bookings')
       .select('id,trade,description,urgency,price_estimate,payout_max,job_lat,job_lng,job_address,customer_name,customer_id,customer_rating,created_at,is_instant_book,instant_book_price,request_expires_at')
       .is('contractor_id', null)
@@ -663,6 +664,8 @@ export default function ContractorHomeScreen() {
       .or(`request_expires_at.gt.${nowIso},request_expires_at.is.null`)
       .order('created_at', { ascending: false })
       .limit(50);
+    if (c?.trade_type) openJobsQuery = openJobsQuery.eq('trade', c.trade_type);
+    const { data: rawJobs } = await openJobsQuery;
 
     if (rawJobs && c?.lat && c?.lng) {
       const withDist = rawJobs
