@@ -522,7 +522,7 @@ export default function JobDetailScreen() {
         onPress: async () => {
           setExpiredActionSaving(true);
           try {
-            const { error } = await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', booking.id);
+            const { error } = await supabase.from('bookings').update({ status: 'cancelled', cancel_reason: 'expired_deleted_by_customer' }).eq('id', booking.id);
             if (error) throw error;
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             router.canGoBack() ? router.back() : router.replace('/(tabs)');

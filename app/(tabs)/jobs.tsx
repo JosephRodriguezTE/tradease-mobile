@@ -40,7 +40,9 @@ type Filter = typeof FILTERS[number];
 
 function matchesFilter(booking: any, f: Filter): boolean {
   const s = booking.status;
-  if (f === 'All') return true;
+  // 'All' means everything relevant, not literally every status — cancelled/declined
+  // have their own tab, same reasoning as Delete visually removing a job.
+  if (f === 'All') return !['cancelled', 'declined'].includes(s);
   if (f === 'Active') return ['pending','accepted','confirmed','in_progress'].includes(s);
   if (f === 'Draft') return s === 'draft';
   if (f === 'Completed') return ['completed','approved','paid'].includes(s);
