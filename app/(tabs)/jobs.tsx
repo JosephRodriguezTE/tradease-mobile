@@ -12,6 +12,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
 import { supabase } from '@/lib/supabase';
+import { formatRemaining } from '@/lib/time';
 import ContractorJobFeed from './contractor-home';
 
 // ─── Status config ────────────────────────────────────────────────────────────
@@ -55,7 +56,11 @@ function BookingCard({ booking, onPress, C, isAdmin, onDelete }: {
   isAdmin?: boolean;
   onDelete?: (id: string) => void;
 }) {
-  const st = STATUS[booking.status] ?? STATUS.pending;
+  const isExpired = booking.status === 'pending'
+    && !booking.contractor_id
+    && !!booking.request_expires_at
+    && new Date(booking.request_expires_at) < new Date();
+  const st = isExpired ? { color: '#EF4444', label: 'Expired' } : (STATUS[booking.status] ?? STATUS.pending);
   const emoji = TRADE_EMOJI[booking.trade] ?? '🔧';
   const contractorName = booking.contractor?.company_name;
   const date = new Date(booking.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -97,10 +102,17 @@ function BookingCard({ booking, onPress, C, isAdmin, onDelete }: {
               <Ionicons name="person-circle-outline" size={13} color={C.textMuted} />
               <Text style={[styles.metaText, { color: C.textSecondary }]} numberOfLines={1}>{contractorName}</Text>
             </>
+          ) : isExpired ? (
+            <>
+              <Ionicons name="time-outline" size={13} color="#EF4444" />
+              <Text style={[styles.metaText, { color: '#EF4444' }]}>Expired — no contractor claimed it</Text>
+            </>
           ) : (
             <>
               <Ionicons name="search-outline" size={13} color="#FBBF24" />
-              <Text style={[styles.metaText, { color: '#FBBF24' }]}>Searching for contractor...</Text>
+              <Text style={[styles.metaText, { color: '#FBBF24' }]} numberOfLines={1}>
+                Searching for contractor...{booking.request_expires_at ? `  ·  ${formatRemaining(booking.request_expires_at)}` : ''}
+              </Text>
             </>
           )}
         </View>
@@ -182,7 +194,7 @@ function CustomerBookings() {
     if (!user?.id) { setLoading(false); return; }
     const { data } = await supabase
       .from('bookings')
-      .select('id, trade, description, status, price_estimate, created_at, scheduled_at, booking_time, contractor_id, contractor:contractor_id(company_name, avatar_url)')
+      .select('id, trade, description, status, price_estimate, created_at, scheduled_at, booking_time, contractor_id, request_mode, request_expires_at, contractor:contractor_id(company_name, avatar_url)')
       .eq('customer_id', user.id)
       .order('created_at', { ascending: false });
 

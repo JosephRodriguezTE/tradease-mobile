@@ -25,6 +25,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Spacing } from '../../constants/Layout';
 import { Font, Radius } from '../../constants/theme';
 import { deriveChatId } from '../../lib/messageService';
+import { formatRemaining } from '../../lib/time';
 import { supabase } from '../../lib/supabase';
 
 const { width } = Dimensions.get('window');
@@ -276,7 +277,7 @@ export default function JobDetailScreen() {
   async function acceptQuote() {
     if (!offer) return;
     setOfferSaving(true);
-    await supabase.from('job_offers').update({ status: 'accepted', customer_action: 'accepted' }).eq('id', offer.id);
+    await supabase.from('job_offers').update({ status: 'accepted', customer_action: 'accepted', final_price: offer.quoted_price }).eq('id', offer.id);
     const bookingUpdates: Record<string, any> = {
       status:         'confirmed',
       price_estimate: offer.quoted_price,
@@ -465,6 +466,90 @@ export default function JobDetailScreen() {
     }
   }
 
+  // ── Expired-request actions ─────────────────────────────────────────────
+  const [expiredActionSaving, setExpiredActionSaving] = useState(false);
+
+  async function postAgain() {
+    if (!booking || !user) return;
+    setExpiredActionSaving(true);
+    try {
+      const hours = booking.request_mode === 'post' ? 48 : 24;
+      const { data: fresh, error } = await supabase.from('bookings').insert({
+        customer_id:         booking.customer_id,
+        user_id:             user.id,
+        customer_name:       booking.customer_name,
+        customer_phone:      booking.customer_phone,
+        trade:                booking.trade,
+        description:         booking.description,
+        notes:               booking.notes,
+        job_lat:             booking.job_lat,
+        job_lng:             booking.job_lng,
+        price_estimate:      booking.price_estimate,
+        booking_time:        booking.booking_time,
+        status:              'pending',
+        payment_status:      'unpaid',
+        refund_status:       'none',
+        is_instant_book:     booking.is_instant_book,
+        instant_book_price:  booking.instant_book_price,
+        ...(booking.photo_urls?.length ? { photo_urls: booking.photo_urls } : {}),
+        request_mode:        booking.request_mode ?? 'request',
+        request_expires_at:  new Date(Date.now() + hours * 60 * 60 * 1000).toISOString(),
+      }).select('id').single();
+      if (error) throw error;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace(`/job/${fresh!.id}` as any);
+    } catch (err: any) {
+      Alert.alert('Error', err.message ?? 'Could not post again. Try again.');
+    } finally {
+      setExpiredActionSaving(false);
+    }
+  }
+
+  function editRequest() {
+    router.push(`/create-job?editId=${booking.id}` as any);
+  }
+
+  function requestCompanyCards() {
+    router.push(`/find-contractor?trade=${encodeURIComponent(booking.trade ?? '')}` as any);
+  }
+
+  async function deleteExpired() {
+    Alert.alert('Delete Request', 'Remove this expired request? This cannot be undone.', [
+      { text: 'Keep', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setExpiredActionSaving(true);
+          try {
+            const { error } = await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', booking.id);
+            if (error) throw error;
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            router.canGoBack() ? router.back() : router.replace('/(tabs)');
+          } catch (err: any) {
+            Alert.alert('Error', err.message ?? 'Could not delete. Try again.');
+          } finally {
+            setExpiredActionSaving(false);
+          }
+        },
+      },
+    ]);
+  }
+
+  async function saveExpiredAsDraft() {
+    setExpiredActionSaving(true);
+    try {
+      const { error } = await supabase.from('bookings').update({ status: 'draft' }).eq('id', booking.id);
+      if (error) throw error;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace('/(tabs)/jobs' as any);
+    } catch (err: any) {
+      Alert.alert('Error', err.message ?? 'Could not save. Try again.');
+    } finally {
+      setExpiredActionSaving(false);
+    }
+  }
+
   const s = makeStyles(C);
 
   if (loading) {
@@ -491,6 +576,11 @@ export default function JobDetailScreen() {
   const st = STATUS_CONFIG[booking.status] ?? STATUS_CONFIG.pending;
   const isActive = ['accepted', 'confirmed', 'in_progress'].includes(booking.status);
   const isCompleted = ['completed', 'approved', 'paid'].includes(booking.status);
+  // Derived, not a stored status — see lib/time.ts / the request-window migration comment.
+  const isExpired = booking.status === 'pending'
+    && !booking.contractor_id
+    && !!booking.request_expires_at
+    && new Date(booking.request_expires_at) < new Date();
   const chatId = booking.contractor_id && booking.customer_id
     ? deriveChatId(booking.customer_id, booking.contractor_id)
     : null;
@@ -514,8 +604,10 @@ export default function JobDetailScreen() {
           <View style={[s.tradePill, { backgroundColor: C.orangeDim, borderColor: C.orange }]}>
             <Text style={[s.tradePillText, { color: C.orange }]}>{booking.trade}</Text>
           </View>
-          <View style={[s.statusPill, { backgroundColor: st.color + '20' }]}>
-            <Text style={[s.statusPillText, { color: st.color }]}>{st.icon}  {st.label}</Text>
+          <View style={[s.statusPill, { backgroundColor: (isExpired ? '#EF4444' : st.color) + '20' }]}>
+            <Text style={[s.statusPillText, { color: isExpired ? '#EF4444' : st.color }]}>
+              {isExpired ? '⏱️  Expired' : `${st.icon}  ${st.label}`}
+            </Text>
           </View>
         </View>
 
@@ -574,7 +666,7 @@ export default function JobDetailScreen() {
         )}
 
         {/* Instant Book — contractor claim CTA */}
-        {isContractor && booking.status === 'pending' && booking.is_instant_book && !booking.contractor_id && (
+        {isContractor && !isExpired && booking.status === 'pending' && booking.is_instant_book && !booking.contractor_id && (
           <View style={[s.offerBanner, { backgroundColor: 'rgba(34,197,94,0.08)', borderColor: 'rgba(34,197,94,0.3)' }]}>
             <Text style={[s.offerBannerTitle, { color: '#22C55E' }]}>⚡ Instant Book Available</Text>
             <Text style={[s.offerBannerSub, { color: C.textSecondary }]}>
@@ -598,7 +690,7 @@ export default function JobDetailScreen() {
         )}
 
         {/* Finding state — only when no quote is active and not instant book */}
-        {booking.status === 'pending' && !offer && !booking.is_instant_book && (
+        {!isExpired && booking.status === 'pending' && !offer && !booking.is_instant_book && (
           <View style={[s.pendingCard, { backgroundColor: 'rgba(251,191,36,0.06)', borderColor: 'rgba(251,191,36,0.2)' }]}>
             <ActivityIndicator color="#FBBF24" size="small" />
             <View style={{ flex: 1 }}>
@@ -606,12 +698,17 @@ export default function JobDetailScreen() {
               <Text style={[s.pendingSub, { color: C.textSecondary }]}>
                 Contractors near you are being notified. You'll receive a notification the moment someone accepts.
               </Text>
+              {!!booking.request_expires_at && (
+                <Text style={[s.pendingSub, { color: '#FBBF24', marginTop: 4, fontWeight: '700' }]}>
+                  {formatRemaining(booking.request_expires_at)}
+                </Text>
+              )}
             </View>
           </View>
         )}
 
         {/* Instant Book waiting state — customer view */}
-        {isCustomer && booking.status === 'pending' && booking.is_instant_book && !booking.contractor_id && (
+        {!isExpired && isCustomer && booking.status === 'pending' && booking.is_instant_book && !booking.contractor_id && (
           <View style={[s.pendingCard, { backgroundColor: 'rgba(34,197,94,0.06)', borderColor: 'rgba(34,197,94,0.2)' }]}>
             <ActivityIndicator color="#22C55E" size="small" />
             <View style={{ flex: 1 }}>
@@ -619,6 +716,50 @@ export default function JobDetailScreen() {
               <Text style={[s.pendingSub, { color: C.textSecondary }]}>
                 Your Instant Book job is live at ${(booking.instant_book_price ?? booking.price_estimate ?? 0).toLocaleString()}. The first contractor to accept will be assigned automatically.
               </Text>
+              {!!booking.request_expires_at && (
+                <Text style={[s.pendingSub, { color: '#22C55E', marginTop: 4, fontWeight: '700' }]}>
+                  {formatRemaining(booking.request_expires_at)}
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Expired state — customer view, recovery actions */}
+        {isExpired && isCustomer && (
+          <View style={[s.pendingCard, { backgroundColor: 'rgba(239,68,68,0.06)', borderColor: 'rgba(239,68,68,0.2)', flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Ionicons name="time-outline" size={20} color="#EF4444" />
+              <View style={{ flex: 1 }}>
+                <Text style={[s.pendingTitle, { color: '#EF4444' }]}>Request expired</Text>
+                <Text style={[s.pendingSub, { color: C.textSecondary }]}>
+                  No contractor claimed this {booking.request_mode === 'post' ? 'post' : 'request'} in time. Your original details are still saved below.
+                </Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              <TouchableOpacity
+                style={[s.offerBtn, s.offerBtnAccept, { backgroundColor: C.orange, flexGrow: 1 }]}
+                onPress={postAgain}
+                disabled={expiredActionSaving}
+              >
+                {expiredActionSaving
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={s.offerBtnAcceptText}>Post Again</Text>
+                }
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.offerBtn, { borderWidth: 1, borderColor: C.border, flexGrow: 1 }]} onPress={editRequest} disabled={expiredActionSaving}>
+                <Text style={{ color: C.textPrimary, fontWeight: '700', fontSize: 13 }}>Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.offerBtn, { borderWidth: 1, borderColor: C.border, flexGrow: 1 }]} onPress={requestCompanyCards} disabled={expiredActionSaving}>
+                <Text style={{ color: C.textPrimary, fontWeight: '700', fontSize: 13 }}>Request Company Cards</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.offerBtn, { borderWidth: 1, borderColor: C.border, flexGrow: 1 }]} onPress={saveExpiredAsDraft} disabled={expiredActionSaving}>
+                <Text style={{ color: C.textPrimary, fontWeight: '700', fontSize: 13 }}>Save</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.offerBtn, { borderWidth: 1, borderColor: '#EF4444', flexGrow: 1 }]} onPress={deleteExpired} disabled={expiredActionSaving}>
+                <Text style={{ color: '#EF4444', fontWeight: '700', fontSize: 13 }}>Delete</Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -916,8 +1057,8 @@ export default function JobDetailScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Customer cancel */}
-          {isCustomer && !isAdmin && CANCELABLE.includes(booking.status) && (
+          {/* Customer cancel — Delete in the Expired card covers this once expired */}
+          {isCustomer && !isAdmin && !isExpired && CANCELABLE.includes(booking.status) && (
             <TouchableOpacity
               style={[s.ctaBtn, s.ctaBtnCancel, cancelSaving && { opacity: 0.5 }]}
               onPress={() => setCancelModalVisible(true)}

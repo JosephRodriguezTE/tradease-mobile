@@ -653,12 +653,14 @@ export default function ContractorHomeScreen() {
       setEarnings({ today: 0, this_week: 0, jobs_today: 0, jobs_this_week: 0 });
     }
 
-    // Open jobs — unassigned, pending, within 30 miles
+    // Open jobs — unassigned, pending, within 30 miles, request/post window not expired
+    const nowIso = new Date().toISOString();
     const { data: rawJobs } = await supabase
       .from('bookings')
-      .select('id,trade,description,urgency,price_estimate,payout_max,job_lat,job_lng,job_address,customer_name,customer_id,customer_rating,created_at,is_instant_book,instant_book_price')
+      .select('id,trade,description,urgency,price_estimate,payout_max,job_lat,job_lng,job_address,customer_name,customer_id,customer_rating,created_at,is_instant_book,instant_book_price,request_expires_at')
       .is('contractor_id', null)
       .eq('status', 'pending')
+      .or(`request_expires_at.gt.${nowIso},request_expires_at.is.null`)
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -677,12 +679,13 @@ export default function ContractorHomeScreen() {
       setJobs(rawJobs ?? []);
     }
 
-    // Missed money — jobs that came in while offline yesterday
+    // Missed money — jobs that came in while offline yesterday, still actually claimable
     const { count: missedCount, data: missedData } = await supabase
       .from('bookings')
       .select('price_estimate', { count: 'exact' })
       .is('contractor_id', null)
       .eq('status', 'pending')
+      .or(`request_expires_at.gt.${nowIso},request_expires_at.is.null`)
       .gte('created_at', new Date(Date.now() - 86400000).toISOString());
 
     if (missedCount && missedCount > 0 && !c?.is_available) {

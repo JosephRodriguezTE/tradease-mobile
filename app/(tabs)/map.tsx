@@ -328,12 +328,13 @@ export default function MapScreen() {
       });
       setContractors((data ?? []) as NearbyContractor[]);
     } else {
-      // Contractor: open jobs (pending, not yet assigned)
+      // Contractor: open jobs (pending, not yet assigned, request/post window not expired)
       const { data } = await supabase
         .from('bookings')
-        .select('id, trade, description, status, created_at, price_estimate, customer:customer_id(full_name, location)')
+        .select('id, trade, description, status, created_at, price_estimate, request_expires_at, customer:customer_id(full_name, location)')
         .eq('status', 'pending')
         .is('contractor_id', null)
+        .or(`request_expires_at.gt.${new Date().toISOString()},request_expires_at.is.null`)
         .order('created_at', { ascending: false })
         .limit(50);
       setJobs((data ?? []) as unknown as NearbyJob[]);

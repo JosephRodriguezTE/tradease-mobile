@@ -63,7 +63,7 @@ export default function CreateJobScreen() {
   const { colors: Colors } = useTheme();
   const router = useRouter();
   const { user } = useAuth();
-  const params = useLocalSearchParams<{ trade?: string; draftId?: string; resume?: string }>();
+  const params = useLocalSearchParams<{ trade?: string; draftId?: string; resume?: string; editId?: string }>();
 
   const [step, setStep] = useState(params.trade ? 1 : 0);
   const [saving, setSaving] = useState(false);
@@ -120,6 +120,34 @@ export default function CreateJobScreen() {
       // Jump to review if complete, otherwise to the furthest filled step
       if (draft.trade && draft.price_estimate && draft.notes) setStep(3);
       else if (draft.trade) setStep(1);
+    })();
+  }, []);
+
+  // Load an expired (or any past) booking's data for "Edit" — pre-fills the
+  // wizard but deliberately does NOT set draftId, so submitting always inserts
+  // a fresh row rather than updating the original in place.
+  useEffect(() => {
+    if (!params.editId) return;
+    (async () => {
+      const { data: source } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('id', params.editId!)
+        .single();
+      if (!source) return;
+      setSelectedTrade(source.trade ?? '');
+      setAddress(source.notes ?? '');
+      const colonIdx = (source.description ?? '').indexOf(': ');
+      setDescription(colonIdx >= 0 ? source.description.slice(colonIdx + 2) : (source.description ?? ''));
+      const allPrices = source.trade ? (PRICE_RANGES[source.trade] ?? []) : [];
+      setSelectedPrice(allPrices.find((p: any) => p.max === source.price_estimate) ?? null);
+      setSelectedTime(TIME_SLOTS.find(t => t.label === source.booking_time) ?? null);
+      const tradeJobs = source.trade ? (TRADE_JOBS[source.trade] ?? []) : [];
+      setSelectedJob(tradeJobs.find((j: any) => (source.description ?? '').startsWith(j.label + ':')) ?? null);
+      setIsInstantBook(!!source.is_instant_book);
+      if (source.instant_book_price) setInstantBookPrice(String(source.instant_book_price));
+      if (source.trade && source.price_estimate && source.notes) setStep(3);
+      else if (source.trade) setStep(1);
     })();
   }, []);
 
