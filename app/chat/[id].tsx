@@ -214,6 +214,10 @@ export default function ChatScreen() {
       });
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
     } catch (err: any) {
+      if (err?.message?.includes('PRE_BOOKING_LIMIT_REACHED')) {
+        Alert.alert('Limit reached', `You've reached the 3-message limit before booking. Book ${otherName} to keep chatting.`);
+        return;
+      }
       Alert.alert('Error', err.message);
     } finally {
       setSending(false);
