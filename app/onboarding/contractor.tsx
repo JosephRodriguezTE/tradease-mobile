@@ -305,7 +305,7 @@ export default function ContractorOnboarding() {
           <View style={S.heroBox}>
             <View style={S.heroIcon}>
               <Image
-                source={require('../../assets/hammer-icon.png')}
+                source={require('../../assets/hamer.png')}
                 style={{ width: 40, height: 40 }}
                 resizeMode="contain"
               />
