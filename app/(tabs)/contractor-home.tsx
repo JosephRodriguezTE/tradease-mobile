@@ -106,7 +106,7 @@ function parseJobDateTime(dateStr: string, slotId: SlotId | null): string | null
 
 function OfferCard({ offer, onRespond, C }: {
   offer: any;
-  onRespond: (offerId: string, bookingId: string, counterPrice: number, accept: boolean) => void;
+  onRespond: (offerId: string, bookingId: string, counterPrice: number, accept: boolean, scheduledAt?: string | null) => void;
   C: any;
 }) {
   const booking      = offer.booking ?? {};
@@ -147,13 +147,13 @@ function OfferCard({ offer, onRespond, C }: {
         <View style={oc.actions}>
           <TouchableOpacity
             style={[oc.btn, oc.declineBtn]}
-            onPress={() => onRespond(offer.id, booking.id, counterPrice, false)}
+            onPress={() => onRespond(offer.id, booking.id, counterPrice, false, offer.scheduled_at)}
           >
             <Text style={oc.declineBtnText}>Decline</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[oc.btn, oc.acceptBtn]}
-            onPress={() => onRespond(offer.id, booking.id, counterPrice, true)}
+            onPress={() => onRespond(offer.id, booking.id, counterPrice, true, offer.scheduled_at)}
           >
             <Text style={oc.acceptBtnText}>Accept ${counterPrice.toLocaleString()}</Text>
           </TouchableOpacity>
@@ -851,7 +851,7 @@ export default function ContractorHomeScreen() {
   }, [contractor?.id, load]);
 
   // ── Respond to counter ────────────────────────────────────────────────────────
-  async function respondToCounter(offerId: string, bookingId: string, counterPrice: number, accept: boolean) {
+  async function respondToCounter(offerId: string, bookingId: string, counterPrice: number, accept: boolean, scheduledAt?: string | null) {
     if (accept) {
       const { error } = await supabase
         .from('job_offers')
@@ -859,9 +859,11 @@ export default function ContractorHomeScreen() {
         .eq('id', offerId);
       if (error) { Alert.alert('Error', 'Could not accept. Try again.'); return; }
 
+      const bookingUpdates: Record<string, any> = { status: 'confirmed', price_estimate: counterPrice, contractor_id: contractor.id };
+      if (scheduledAt) bookingUpdates.scheduled_at = scheduledAt;
       await supabase
         .from('bookings')
-        .update({ status: 'confirmed', price_estimate: counterPrice, contractor_id: contractor.id })
+        .update(bookingUpdates)
         .eq('id', bookingId);
 
       // Create work order so both parties can access it immediately
