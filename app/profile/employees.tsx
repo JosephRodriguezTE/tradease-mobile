@@ -1,5 +1,6 @@
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
+import { useRole } from '@/hooks/useRole';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
@@ -60,6 +61,11 @@ export default function EmployeesScreen() {
   const { colors: C } = useTheme();
   const router = useRouter();
   const { user } = useAuth();
+  const { isEmployee, employerContractorId } = useRole();
+
+  const contractorId = isEmployee && employerContractorId
+    ? employerContractorId
+    : (user?.id ?? null);
 
   const [employees, setEmployees]         = useState<Employee[]>([]);
   const [contractor, setContractor]       = useState<any>(null);
@@ -77,12 +83,12 @@ export default function EmployeesScreen() {
   const [inviteRole, setInviteRole]     = useState('Field Tech');
 
   const load = useCallback(async () => {
-    if (!user) return;
+    if (!contractorId) return;
 
     const [{ data: cData }, { data: eData }, { data: summaryData }] = await Promise.all([
-      supabase.from('contractors').select('id, company_name, company_tag, plan').eq('id', user.id).single(),
-      supabase.from('contractor_employees').select('*').eq('contractor_id', user.id).order('invited_at', { ascending: false }),
-      supabase.from('contractor_team_summary').select('active_count, pending_count, total_used').eq('contractor_id', user.id).single(),
+      supabase.from('contractors').select('id, company_name, company_tag, plan').eq('id', contractorId).single(),
+      supabase.from('contractor_employees').select('*').eq('contractor_id', contractorId).order('invited_at', { ascending: false }),
+      supabase.from('contractor_team_summary').select('active_count, pending_count, total_used').eq('contractor_id', contractorId).single(),
     ]);
 
     if (cData) {
@@ -104,6 +110,7 @@ export default function EmployeesScreen() {
   };
 
   async function handleSendInvite() {
+    if (!contractorId) return;
     const email = inviteEmail.trim().toLowerCase();
     const name  = inviteName.trim();
 
@@ -139,7 +146,7 @@ export default function EmployeesScreen() {
     const token = Crypto.randomUUID();
 
     const { error } = await supabase.from('contractor_employees').insert({
-      contractor_id:          user!.id,
+      contractor_id:          contractorId,
       email,
       full_name:              name,
       role:                   inviteRole,
