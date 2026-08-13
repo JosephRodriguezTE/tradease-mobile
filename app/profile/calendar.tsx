@@ -62,11 +62,11 @@ function useCalendar(contractorId: string | null) {
     const [bookRes, schedRes] = await Promise.all([
       supabase
         .from('bookings')
-        .select('id,trade,description,job_address,scheduled_date,price_estimate,status,customer_name')
+        .select('id,trade,description,job_address,scheduled_at,price_estimate,status,customer_name')
         .eq('contractor_id', contractorId)
         .in('status', ['confirmed', 'in_progress', 'completed'])
-        .not('scheduled_date', 'is', null)
-        .order('scheduled_date', { ascending: true }),
+        .not('scheduled_at', 'is', null)
+        .order('scheduled_at', { ascending: true }),
       supabase
         .from('contractor_schedule')
         .select('*')
@@ -80,8 +80,8 @@ function useCalendar(contractorId: string | null) {
         rawId:       undefined as string | undefined,
         title:       b.trade ?? 'Job',
         description: b.job_address ?? b.description,
-        start_time:  b.scheduled_date,
-        end_time:    new Date(new Date(b.scheduled_date).getTime() + 2 * 3600000).toISOString(),
+        start_time:  b.scheduled_at,
+        end_time:    new Date(new Date(b.scheduled_at).getTime() + 2 * 3600000).toISOString(),
         event_type:  'booking' as EventType,
         booking_id:  b.id,
         color:       '#FF6200',
