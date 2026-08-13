@@ -27,6 +27,7 @@ import { Font, Radius } from '../../constants/theme';
 import { deriveChatId } from '../../lib/messageService';
 import { formatRemaining } from '../../lib/time';
 import { supabase } from '../../lib/supabase';
+import { QuoteBottomSheet } from '../(tabs)/contractor-home';
 
 const { width } = Dimensions.get('window');
 const CARD_W = (width - Spacing.lg * 2 - 10) / 2;
@@ -221,6 +222,7 @@ export default function JobDetailScreen() {
   const [cancelSaving,       setCancelSaving]       = useState(false);
   const [cancelPolicyOpen,   setCancelPolicyOpen]   = useState(false);
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
+  const [showQuoteSheet,     setShowQuoteSheet]     = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -689,8 +691,8 @@ export default function JobDetailScreen() {
           </View>
         )}
 
-        {/* Finding state — only when no quote is active and not instant book */}
-        {!isExpired && booking.status === 'pending' && !offer && !booking.is_instant_book && (
+        {/* Finding state — customer view only, no quote active, not instant book */}
+        {!isExpired && isCustomer && booking.status === 'pending' && !offer && !booking.is_instant_book && (
           <View style={[s.pendingCard, { backgroundColor: 'rgba(251,191,36,0.06)', borderColor: 'rgba(251,191,36,0.2)' }]}>
             <ActivityIndicator color="#FBBF24" size="small" />
             <View style={{ flex: 1 }}>
@@ -704,6 +706,32 @@ export default function JobDetailScreen() {
                 </Text>
               )}
             </View>
+          </View>
+        )}
+
+        {/* Same state, contractor view — quoting CTA instead of customer copy */}
+        {!isExpired && isContractor && booking.status === 'pending' && !offer && !booking.is_instant_book && (
+          <View style={[s.pendingCard, { backgroundColor: 'rgba(255,98,0,0.06)', borderColor: 'rgba(255,98,0,0.2)', flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Ionicons name="pricetag-outline" size={20} color={C.orange} />
+              <View style={{ flex: 1 }}>
+                <Text style={[s.pendingTitle, { color: C.orange }]}>This job needs a quote</Text>
+                <Text style={[s.pendingSub, { color: C.textSecondary }]}>
+                  Send a price and timeline to be considered for this job.
+                </Text>
+                {!!booking.request_expires_at && (
+                  <Text style={[s.pendingSub, { color: C.orange, marginTop: 4, fontWeight: '700' }]}>
+                    {formatRemaining(booking.request_expires_at)}
+                  </Text>
+                )}
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[s.offerBtn, s.offerBtnAccept, { backgroundColor: C.orange }]}
+              onPress={() => setShowQuoteSheet(true)}
+            >
+              <Text style={s.offerBtnAcceptText}>Send a Quote</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -916,6 +944,18 @@ export default function JobDetailScreen() {
 
         <View style={{ height: 120 }} />
       </ScrollView>
+
+      {/* Send-quote sheet — same component the contractor feed uses */}
+      <QuoteBottomSheet
+        booking={booking}
+        contractorId={user?.id ?? ''}
+        visible={showQuoteSheet}
+        onClose={() => setShowQuoteSheet(false)}
+        onSent={() => {
+          setShowQuoteSheet(false);
+          Alert.alert('Quote Sent', 'The customer has been notified.');
+        }}
+      />
 
       {/* Counter offer modal */}
       <Modal visible={counterModalVisible} transparent animationType="slide" onRequestClose={() => setCounterModalVisible(false)}>

@@ -252,7 +252,7 @@ const dc = StyleSheet.create({
 
 // ─── Quote Bottom Sheet ───────────────────────────────────────────────────────
 
-function QuoteBottomSheet({ booking, contractorId, visible, onClose, onSent }: {
+export function QuoteBottomSheet({ booking, contractorId, visible, onClose, onSent }: {
   booking: Job | null;
   contractorId: string;
   visible: boolean;
