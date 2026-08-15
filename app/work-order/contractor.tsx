@@ -1102,6 +1102,14 @@ export default function ContractorWorkOrderScreen() {
   const [showPayday, setShowPayday] = useState(false);
   const [paydayCents, setPaydayCents] = useState(0);
 
+  // ── Add to Portfolio prompt ──────────────────────────────────────────────
+  const [portfolioPromptDismissed, setPortfolioPromptDismissed] = useState(false);
+  const [showPortfolioCuration,    setShowPortfolioCuration]    = useState(false);
+  const [portfolioSelectedIds,     setPortfolioSelectedIds]     = useState<Set<string>>(new Set());
+  const [portfolioTitle,           setPortfolioTitle]           = useState('');
+  const [portfolioDescription,     setPortfolioDescription]     = useState('');
+  const [portfolioPublishing,      setPortfolioPublishing]      = useState(false);
+
   // ─────────────────────────────────────────────────────────────────────────
   // Load
   // ─────────────────────────────────────────────────────────────────────────
@@ -1171,8 +1179,9 @@ export default function ContractorWorkOrderScreen() {
           const updated = p.new as any;
           setWo(prev => prev ? { ...prev, ...updated } : prev);
           if (updated.wo_status === 'completed') {
-            supabase.from('payment_intents').select('amount_cents').eq('id', updated.payment_intent_id ?? '').maybeSingle()
+            supabase.from('payment_intents').select('id,status,amount_cents').eq('id', updated.payment_intent_id ?? '').maybeSingle()
               .then(({ data }) => {
+                setPI(data ?? null);
                 setPaydayCents(data?.amount_cents ?? 0);
                 setShowPayday(true);
               });
@@ -1467,6 +1476,74 @@ export default function ContractorWorkOrderScreen() {
   const isActive  = wo.wo_status === 'in_progress';
   const FOOTER_H  = action.kind === 'countdown' ? 210 + insets.bottom : 100 + insets.bottom;
 
+  // Both required — completed alone doesn't mean payment was ever captured.
+  const canAddToPortfolio = wo.wo_status === 'completed' && paymentIntent?.status === 'captured';
+
+  const portfolioMedia = media.filter(m => m.kind === 'before' || m.kind === 'after');
+
+  function openPortfolioCuration() {
+    setPortfolioSelectedIds(new Set(portfolioMedia.filter(m => m.kind === 'after').map(m => m.id)));
+    setPortfolioTitle(trade);
+    setPortfolioDescription('');
+    setShowPortfolioCuration(true);
+  }
+
+  function togglePortfolioPhoto(id: string) {
+    setPortfolioSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  async function publishToPortfolio() {
+    if (!wo || !user) return;
+    const selected = portfolioMedia.filter(m => portfolioSelectedIds.has(m.id));
+    if (selected.length === 0) {
+      Alert.alert('Pick at least one photo', 'Select at least one before/after photo to publish.');
+      return;
+    }
+    setPortfolioPublishing(true);
+    try {
+      const photoUrls: string[] = [];
+      for (const item of selected) {
+        if (!item._publicUrl) continue;
+        const blob = await (await fetch(item._publicUrl)).blob();
+        const ext  = item.storage_path.split('.').pop()?.toLowerCase() ?? 'jpg';
+        const path = `${user.id}/${wo.id}/${item.id}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from('portfolio-completed')
+          .upload(path, blob, { contentType: `image/${ext}`, upsert: true });
+        if (upErr) throw upErr;
+        const { data: urlData } = supabase.storage.from('portfolio-completed').getPublicUrl(path);
+        if (urlData?.publicUrl) photoUrls.push(urlData.publicUrl);
+      }
+
+      const { error: insErr } = await supabase.from('portfolio_jobs').insert({
+        contractor_id:            user.id,
+        original_work_order_id:   wo.id,
+        service_type:             trade,
+        title:                    portfolioTitle.trim() || trade,
+        description:              portfolioDescription.trim() || null,
+        completed_price:          paymentIntent?.amount_cents != null ? paymentIntent.amount_cents / 100 : null,
+        completed_at:             new Date().toISOString(),
+        general_location:         wo.booking?.job_address?.split(',').slice(-2).join(',').trim() || null,
+        photos:                   photoUrls,
+        is_published:             true,
+      });
+      if (insErr) throw insErr;
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowPortfolioCuration(false);
+      setPortfolioPromptDismissed(true);
+      showToast({ type: 'success', title: 'Added to your portfolio' });
+    } catch (e: any) {
+      Alert.alert('Could not publish', e.message ?? 'Try again.');
+    } finally {
+      setPortfolioPublishing(false);
+    }
+  }
+
   function renderSection({ item: key }: { item: SectionKey }) {
     switch (key) {
       case 'stepper':
@@ -1595,6 +1672,24 @@ export default function ContractorWorkOrderScreen() {
         contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: FOOTER_H, paddingTop: 8 }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={
+          canAddToPortfolio && !portfolioPromptDismissed ? (
+            <View style={s.portfolioCard}>
+              <Text style={s.portfolioCardTitle}>Add this job to your portfolio?</Text>
+              <Text style={s.portfolioCardSub}>
+                Show this completed job on your public profile to help win future customers.
+              </Text>
+              <View style={s.portfolioBtnRow}>
+                <TouchableOpacity style={s.portfolioNotNowBtn} onPress={() => setPortfolioPromptDismissed(true)}>
+                  <Text style={s.portfolioNotNowTxt}>Not Now</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.portfolioAddBtn} onPress={openPortfolioCuration}>
+                  <Text style={s.portfolioAddBtnTxt}>Add to Portfolio</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null
+        }
       />
 
       {/* ── Sticky action footer ───────────────────────────────────────────── */}
@@ -1700,6 +1795,71 @@ export default function ContractorWorkOrderScreen() {
             </TouchableOpacity>
           </View>
         </View>
+      </Modal>
+
+      {/* Add to Portfolio curation sheet */}
+      <Modal visible={showPortfolioCuration} transparent animationType="slide" onRequestClose={() => setShowPortfolioCuration(false)}>
+        <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <TouchableOpacity style={s.modalBackdrop} onPress={() => setShowPortfolioCuration(false)} activeOpacity={1} />
+          <View style={s.modalSheet}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalTitle}>Add to Portfolio</Text>
+            <Text style={s.modalSub}>{trade} · ${((paymentIntent?.amount_cents ?? 0) / 100).toFixed(2)}</Text>
+
+            <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+              <Text style={s.curationLabel}>PHOTOS</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
+                {portfolioMedia.map(m => {
+                  const isSelected = portfolioSelectedIds.has(m.id);
+                  return (
+                    <TouchableOpacity key={m.id} onPress={() => togglePortfolioPhoto(m.id)} activeOpacity={0.8}>
+                      <Image source={{ uri: m._publicUrl }} style={[s.curationThumb, isSelected && s.curationThumbSelected]} />
+                      {isSelected && (
+                        <View style={s.curationCheckBadge}>
+                          <Ionicons name="checkmark" size={12} color="#fff" />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+              {portfolioMedia.length === 0 && (
+                <Text style={s.txt2}>No before/after photos on this job to publish.</Text>
+              )}
+
+              <Text style={[s.curationLabel, { marginTop: 14 }]}>TITLE</Text>
+              <TextInput
+                style={s.curationInput}
+                value={portfolioTitle}
+                onChangeText={setPortfolioTitle}
+                placeholder={trade}
+                placeholderTextColor={G.txt2}
+              />
+
+              <Text style={[s.curationLabel, { marginTop: 10 }]}>DESCRIPTION (OPTIONAL)</Text>
+              <TextInput
+                style={[s.curationInput, { height: 80, textAlignVertical: 'top' }]}
+                value={portfolioDescription}
+                onChangeText={setPortfolioDescription}
+                placeholder="What did you do on this job?"
+                placeholderTextColor={G.txt2}
+                multiline
+              />
+            </ScrollView>
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+              <TouchableOpacity style={s.curationCancelBtn} onPress={() => setShowPortfolioCuration(false)} disabled={portfolioPublishing}>
+                <Text style={s.curationCancelTxt}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.curationPublishBtn} onPress={publishToPortfolio} disabled={portfolioPublishing}>
+                {portfolioPublishing
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={s.curationPublishTxt}>Publish</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -1842,6 +2002,33 @@ const s = StyleSheet.create({
   paydaySub:      { fontSize: 13, color: G.txt2, textAlign: 'center' },
   paydayBtn:      { marginTop: 16, backgroundColor: G.green, borderRadius: 14, paddingHorizontal: 32, paddingVertical: 14 },
   paydayBtnTxt:   { fontSize: 16, fontWeight: '800', color: '#fff' },
+
+  // Add to Portfolio prompt card
+  portfolioCard:      { backgroundColor: G.cardAlt, borderRadius: 16, borderWidth: 1, borderColor: `${G.orange}40`, padding: 16, marginHorizontal: 14, marginTop: 10, marginBottom: 4, gap: 10 },
+  portfolioCardTitle: { fontSize: 15, fontWeight: '800', color: G.txt },
+  portfolioCardSub:   { fontSize: 13, color: G.txt2, lineHeight: 18 },
+  portfolioBtnRow:    { flexDirection: 'row', gap: 10, marginTop: 4 },
+  portfolioAddBtn:    { flex: 1, backgroundColor: G.orange, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  portfolioAddBtnTxt: { fontSize: 14, fontWeight: '800', color: '#fff' },
+  portfolioNotNowBtn: { flex: 1, borderRadius: 12, borderWidth: 1, borderColor: G.border, paddingVertical: 12, alignItems: 'center' },
+  portfolioNotNowTxt: { fontSize: 14, fontWeight: '700', color: G.txt2 },
+
+  // Add to Portfolio curation sheet
+  modalOverlay:  { flex: 1, justifyContent: 'flex-end' },
+  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
+  modalSheet:    { backgroundColor: G.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 32, borderWidth: 0.5, borderColor: G.border, borderBottomWidth: 0, maxHeight: '90%' },
+  modalHandle:   { width: 40, height: 4, borderRadius: 2, backgroundColor: G.border, alignSelf: 'center', marginBottom: 14 },
+  modalTitle:    { fontSize: 20, fontWeight: '800', color: G.txt, marginBottom: 2 },
+  modalSub:      { fontSize: 13, color: G.txt2, marginBottom: 16 },
+  curationLabel: { fontSize: 10, fontWeight: '800', color: G.txt3, letterSpacing: 0.8, marginBottom: 6 },
+  curationThumb: { width: 72, height: 72, borderRadius: 10, borderWidth: 2, borderColor: 'transparent' },
+  curationThumbSelected: { borderColor: G.orange },
+  curationCheckBadge: { position: 'absolute', top: 4, right: 4, width: 18, height: 18, borderRadius: 9, backgroundColor: G.orange, alignItems: 'center', justifyContent: 'center' },
+  curationInput: { backgroundColor: G.cardAlt, borderRadius: 10, borderWidth: 1, borderColor: G.border, padding: 12, fontSize: 15, color: G.txt },
+  curationCancelBtn:  { flex: 1, borderRadius: 14, borderWidth: 1, borderColor: G.border, paddingVertical: 14, alignItems: 'center' },
+  curationCancelTxt:  { fontSize: 15, fontWeight: '700', color: G.txt2 },
+  curationPublishBtn: { flex: 1, backgroundColor: G.orange, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  curationPublishTxt: { fontSize: 15, fontWeight: '800', color: '#fff' },
 });
 
 // Change Order Modal styles
