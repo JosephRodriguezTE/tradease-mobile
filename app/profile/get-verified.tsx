@@ -280,7 +280,7 @@ export default function GetVerifiedScreen() {
       const ext = mime === 'application/pdf' ? 'pdf' : (mime.split('/')[1] || 'jpg');
       const fullPath = `${storagePath}.${ext}`;
       const { error } = await supabase.storage
-        .from('contractor-docs')
+        .from('verification-docs')
         .upload(fullPath, blob, { contentType: mime, upsert: true });
       if (error) throw error;
       return fullPath;

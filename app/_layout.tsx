@@ -118,6 +118,12 @@ export default function RootLayout() {
           <Stack.Screen name="profile/analytics" />
           <Stack.Screen name="profile/earnings" />
 
+          {/* ── Admin ── */}
+          <Stack.Screen name="admin/index" />
+          <Stack.Screen name="admin/verifications" />
+          <Stack.Screen name="admin/disputes" />
+          <Stack.Screen name="admin/refunds" />
+
           {/* ── Referrals ── */}
           <Stack.Screen name="referrals" />
 

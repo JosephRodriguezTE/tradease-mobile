@@ -4,6 +4,7 @@
 
 import { useTheme } from '@/context/ThemeContext';
 import { useRole } from '@/hooks/useRole';
+import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -136,6 +137,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { colors: C, isDark, mode, toggleTheme } = useTheme();
   const { isContractor, role } = useRole();
+  const { isAdmin } = useIsAdmin();
 
   const [pushEnabled,  setPushEnabled]   = useState(true);
   const [emailEnabled, setEmailEnabled]  = useState(true);
@@ -218,6 +220,10 @@ export default function SettingsScreen() {
     { id:'privacy', icon:'shield-checkmark-outline', iconColor:C.textMuted, label:'Privacy Policy',   onPress:() => router.push('/profile/privacy') },
   ];
 
+  const adminRows: RowItem[] = [
+    { id:'admin', icon:'shield-outline', iconColor:'#38BDF8', label:'Admin Dashboard', onPress:() => router.push('/admin' as any) },
+  ];
+
   const dangerRows: RowItem[] = [
     { id:'signout', icon:'log-out-outline', iconColor:C.error, label:'Sign Out',       destructive:true, onPress:handleSignOut },
     { id:'delete',  icon:'trash-outline',   iconColor:C.error, label:'Delete Account', destructive:true, onPress:handleDeleteAccount },
@@ -254,6 +260,7 @@ export default function SettingsScreen() {
         </View>
 
         <Section title="Account"     items={accountRows}  C={C} />
+        {isAdmin && <Section title="Admin" items={adminRows} C={C} />}
         <Section title="Preferences" items={prefRows}     C={C} />
         <Section title="Support"     items={supportRows}  C={C} />
         <Section title="Legal"       items={legalRows}    C={C} />
