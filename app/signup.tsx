@@ -23,6 +23,9 @@ import { ALL_TRADES, TRADE_ICONS } from '../lib/tradeJobs';
 
 const { width } = Dimensions.get('window');
 
+// Bump this when the Terms of Service / Privacy Policy text changes.
+const CURRENT_TOS_VERSION = '2026-08-21';
+
 // ─── FOCUS INPUT ────────────────────────────────────────
 function FocusInput({
   label, value, onChangeText, placeholder, secureTextEntry,
@@ -236,6 +239,14 @@ export default function SignupScreen() {
         if (!authData.user?.id) throw new Error('Account creation failed.');
         userId = authData.user.id;
       }
+
+      // Record ToS/Privacy acceptance. Non-blocking — `agreed` above is the
+      // real, hard gate; this is just the timestamped audit record of it.
+      const { error: tosErr } = await supabase.from('tos_acceptances').insert({
+        user_id: userId,
+        doc_version: CURRENT_TOS_VERSION,
+      });
+      if (tosErr) console.log('tos_acceptances insert error:', tosErr);
 
       // Insert profile
       if (role === 'customer') {
