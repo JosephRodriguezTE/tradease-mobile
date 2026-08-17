@@ -199,10 +199,6 @@ export default function SignupScreen() {
 
   // ─── HANDLERS ─────────────────────────────────────────
 
-  const handleApple = async () => {
-    Alert.alert('Coming Soon', 'Apple sign-up will be available once Apple Developer is configured.');
-  };
-
   const handleSignup = async (requestVerification = false) => {
     if (!legalName.trim()) return Alert.alert('Required', 'Please enter your legal name.');
     if (!email.trim()) return Alert.alert('Required', 'Please enter your email.');
@@ -595,16 +591,6 @@ export default function SignupScreen() {
               />
             </View>
 
-            {/* Social - only when NOT in Google mode */}
-            {!googleMode && (
-              <View style={styles.socialRow}>
-                <TouchableOpacity style={styles.socialBtn} onPress={handleApple} activeOpacity={0.85}>
-                  <Text style={styles.socialIcon}>🍎</Text>
-                  <Text style={styles.socialText}>Apple</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
             {/* Terms */}
             <TouchableOpacity style={styles.termsRow} activeOpacity={0.8} onPress={() => setAgreed(!agreed)}>
               <View style={[styles.checkbox, agreed && styles.checkboxActive]}>
@@ -840,16 +826,6 @@ const styles = StyleSheet.create({
   },
 
   eye: { fontSize: 16 },
-
-  socialRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  socialBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, height: 50, borderRadius: 14,
-    backgroundColor: 'rgba(20,20,20,0.85)',
-    borderWidth: 1.5, borderColor: '#222',
-  },
-  socialIcon: { fontSize: 16, color: Colors.white, fontFamily: FontFamily.bold },
-  socialText: { fontSize: 14, fontFamily: FontFamily.semibold, color: Colors.white },
 
   termsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 4 },
   checkbox: {
