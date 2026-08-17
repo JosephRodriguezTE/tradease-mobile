@@ -753,7 +753,8 @@ export default function ContractorHomeScreen() {
           const plan = c?.plan as string | undefined;
           const raw  = payload.new as any;
 
-          if ((plan === 'leads' || plan === 'pro') && raw?.id && !raw.contractor_id && raw.status === 'pending') {
+          const tradeMatches = !c?.trade_type || raw.trade === c.trade_type;
+          if ((plan === 'leads' || plan === 'pro') && raw?.id && !raw.contractor_id && raw.status === 'pending' && tradeMatches) {
             const priorityJob: Job = {
               id:              raw.id,
               trade:           raw.trade ?? '',
