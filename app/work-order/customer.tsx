@@ -19,9 +19,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Skeleton, SkeletonBillSection, SkeletonChecklist, SkeletonContractorCard, SkeletonHero } from '@/components/Skeleton';
 import { WorkOrderSheet } from '@/components/WorkOrderSheet';
 import { useAuth } from '@/hooks/useAuth';
+import { DEFAULT_MAP_REGION, MAPBOX_ACCESS_TOKEN } from '@/lib/mapConfig';
 import { supabase } from '@/lib/supabase';
 
-MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
+MapboxGL.setAccessToken(MAPBOX_ACCESS_TOKEN);
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 
@@ -401,7 +402,9 @@ function MapSection({
             <MapboxGL.Camera bounds={bounds} padding={{ paddingLeft: 40, paddingRight: 40, paddingTop: 40, paddingBottom: 40 }} animationMode="easeTo" animationDuration={1000} />
           ) : hasJob ? (
             <MapboxGL.Camera centerCoordinate={[jobLng!, jobLat!]} zoomLevel={13} animationMode="none" />
-          ) : null}
+          ) : (
+            <MapboxGL.Camera centerCoordinate={DEFAULT_MAP_REGION.centerCoordinate} zoomLevel={DEFAULT_MAP_REGION.zoomLevel} animationMode="none" />
+          )}
 
           {hasJob && (
             <MapboxGL.PointAnnotation id="jobPin" coordinate={[jobLng!, jobLat!]}>
@@ -1414,7 +1417,7 @@ export default function CustomerWorkOrderScreen() {
           pitchEnabled={false}
           rotateEnabled={false}
         >
-          {jobLat && jobLng && (
+          {jobLat && jobLng ? (
             <MapboxGL.Camera
               centerCoordinate={
                 contractorCoord
@@ -1427,6 +1430,12 @@ export default function CustomerWorkOrderScreen() {
               zoomLevel={13}
               animationMode="flyTo"
               animationDuration={800}
+            />
+          ) : (
+            <MapboxGL.Camera
+              centerCoordinate={DEFAULT_MAP_REGION.centerCoordinate}
+              zoomLevel={DEFAULT_MAP_REGION.zoomLevel}
+              animationMode="none"
             />
           )}
 

@@ -22,9 +22,10 @@ import { Skeleton, SkeletonBillSection, SkeletonChecklist, SkeletonSectionCard }
 import { useAuth } from '@/hooks/useAuth';
 import { usePrimaryAction } from '@/hooks/usePrimaryAction';
 import { enqueueOffline, flushOfflineQueue } from '@/lib/offlineQueue';
+import { MAPBOX_ACCESS_TOKEN } from '@/lib/mapConfig';
 import { supabase } from '@/lib/supabase';
 
-MapboxGL.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '');
+MapboxGL.setAccessToken(MAPBOX_ACCESS_TOKEN);
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 
@@ -190,8 +191,7 @@ function timeLabel(iso: string): string {
 
 async function fetchRoute(sLat: number, sLng: number, eLat: number, eLng: number) {
   try {
-    const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
-    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${sLng},${sLat};${eLng},${eLat}?access_token=${token}&geometries=geojson&overview=full`;
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${sLng},${sLat};${eLng},${eLat}?access_token=${MAPBOX_ACCESS_TOKEN}&geometries=geojson&overview=full`;
     const res = await fetch(url);
     const json = await res.json();
     if (!json.routes?.[0]) return null;
