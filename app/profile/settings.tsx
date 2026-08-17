@@ -135,7 +135,7 @@ function Section({ title, items, C }: { title:string; items:RowItem[]; C:any }) 
 export default function SettingsScreen() {
   const router = useRouter();
   const { colors: C, isDark, mode, toggleTheme } = useTheme();
-  const { isContractor } = useRole();
+  const { isContractor, role } = useRole();
 
   const [pushEnabled,  setPushEnabled]   = useState(true);
   const [emailEnabled, setEmailEnabled]  = useState(true);
@@ -160,9 +160,31 @@ export default function SettingsScreen() {
       'This permanently deletes your account and all data. This cannot be undone.',
       [
         { text:'Cancel', style:'cancel' },
-        { text:'Delete My Account', style:'destructive', onPress: () =>
-          Alert.alert('Contact Support', 'Email joseph.rodriguez.te@gmail.com to complete account deletion.')
-        },
+        { text:'Delete My Account', style:'destructive', onPress: async () => {
+          const { data:{ user } } = await supabase.auth.getUser();
+          if (!user) return;
+
+          const { error } = await supabase.from('account_deletion_requests').insert({
+            user_id: user.id,
+            email:   user.email,
+            role,
+          });
+
+          if (error) {
+            Alert.alert('Error', "Couldn't submit your deletion request. Please try again.");
+            return;
+          }
+
+          Alert.alert(
+            'Account Scheduled for Deletion',
+            "Your account is scheduled for deletion and will be permanently removed within 30 days. You'll be signed out now.",
+            [{ text:'OK', onPress: async () => {
+              setSigningOut(true);
+              await supabase.auth.signOut();
+              router.replace('/login');
+            }}],
+          );
+        }},
       ],
     );
   }
