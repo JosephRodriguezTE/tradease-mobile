@@ -47,11 +47,12 @@ const STATUS_CONFIG = {
 };
 
 const CHECKLIST = [
-  { key:'legal_name',     label:'Legal name',          field:'legal_name' },
-  { key:'license_number', label:'License number',       field:'license_number' },
-  { key:'license_state',  label:'Issuing state',        field:'license_state' },
-  { key:'insurance_url',  label:'Insurance document',   field:'insurance_url' },
-  { key:'service_area',   label:'Service area',         field:'service_area' },
+  { key:'legal_name',        label:'Legal name',          field:'legal_name' },
+  { key:'license_number',    label:'License number',      field:'license_number' },
+  { key:'license_state',     label:'Issuing state',       field:'license_state' },
+  { key:'insurance_doc_path',label:'Insurance document',  field:'insurance_doc_path' },
+  { key:'id_doc_path',       label:'Government ID',       field:'id_doc_path' },
+  { key:'service_area',      label:'Service area',        field:'service_area' },
 ];
 
 export default function VerificationStatusScreen() {
@@ -64,12 +65,34 @@ export default function VerificationStatusScreen() {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data } = await supabase
-        .from('contractors')
-        .select('legal_name,license_number,license_state,insurance_url,service_area,verification_status,verification_submitted_at,verification_rejection_reason,approved')
-        .eq('id', user.id)
-        .single();
-      setProfile(data);
+
+      const [{ data: contractor }, { data: verification }] = await Promise.all([
+        supabase
+          .from('contractors')
+          .select('company_name,service_area,verification_status,verification_rejection_reason,approved')
+          .eq('id', user.id)
+          .single(),
+        supabase
+          .from('contractor_verification')
+          .select('license_number,license_state,insurance_doc_path,id_doc_path,submitted_at')
+          .eq('contractor_id', user.id)
+          .maybeSingle(),
+      ]);
+
+      setProfile({
+        // "Legal name" has no dedicated column anywhere — company_name is the
+        // closest real field, set on the company profile, not by this submission.
+        legal_name:                    contractor?.company_name ?? null,
+        service_area:                  contractor?.service_area ?? null,
+        verification_status:           contractor?.verification_status ?? null,
+        verification_rejection_reason: contractor?.verification_rejection_reason ?? null,
+        approved:                      contractor?.approved ?? null,
+        license_number:                verification?.license_number ?? null,
+        license_state:                 verification?.license_state ?? null,
+        insurance_doc_path:            verification?.insurance_doc_path ?? null,
+        id_doc_path:                   verification?.id_doc_path ?? null,
+        verification_submitted_at:     verification?.submitted_at ?? null,
+      });
       setLoading(false);
     }
     load();
