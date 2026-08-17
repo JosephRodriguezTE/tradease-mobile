@@ -209,9 +209,8 @@ export default function SettingsScreen() {
   ];
 
   const supportRows: RowItem[] = [
-    { id:'contact', icon:'chatbubble-ellipses-outline', iconColor:'#34D399', label:'Contact Us',    onPress:() => router.push('/profile/contact') },
-    { id:'help',    icon:'help-circle-outline',          iconColor:'#60A5FA', label:'Help Center',   onPress:() => Alert.alert('Help Center', 'help.tradease.app — coming soon.') },
-    { id:'rate',    icon:'star-outline',                 iconColor:C.orange,  label:'Rate Tradease', onPress:() => Alert.alert('Rate Us', 'App Store rating — coming soon.') },
+    { id:'contact', icon:'chatbubble-ellipses-outline', iconColor:'#34D399', label:'Contact Us',  onPress:() => router.push('/profile/contact') },
+    { id:'help',    icon:'help-circle-outline',          iconColor:'#60A5FA', label:'Help Center', comingSoon:true, disabled:true },
   ];
 
   const legalRows: RowItem[] = [
