@@ -33,6 +33,19 @@ interface PortfolioItem {
   sort_order: number;
 }
 
+interface CompletedJob {
+  id: string;
+  title: string | null;
+  service_type: string | null;
+  general_location: string | null;
+  completed_price: number | null;
+  completed_at: string | null;
+  photos: string[];
+}
+
+const COMPLETED_CARD_PAD = 14;
+const COMPLETED_THUMB = (SCREEN_W - SP[4] * 2 - COMPLETED_CARD_PAD * 2 - GRID_GAP * 2) / 3;
+
 function StarRating({ rating, size = 14 }: { rating: number; size?: number }) {
   return (
     <View style={{ flexDirection:'row', gap:2 }}>
@@ -51,8 +64,10 @@ export default function ContractorPublicProfile() {
   const [contractor,     setContractor]     = useState<any>(null);
   const [reviews,        setReviews]        = useState<any[]>([]);
   const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
+  const [completedJobs,  setCompletedJobs]  = useState<CompletedJob[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [lightboxItem,   setLightboxItem]   = useState<PortfolioItem | null>(null);
+  const [completedLightbox, setCompletedLightbox] = useState<{ url: string; job: CompletedJob } | null>(null);
 
   const scrollY = useRef(new Animated.Value(0)).current;
   const headerOpacity = scrollY.interpolate({ inputRange:[80,160], outputRange:[0,1], extrapolate:'clamp' });
@@ -74,7 +89,7 @@ export default function ContractorPublicProfile() {
         .single();
       setContractor(data);
 
-      const [{ data: rev }, { data: portfolio }] = await Promise.all([
+      const [{ data: rev }, { data: portfolio }, { data: completed }] = await Promise.all([
         supabase
           .from('reviews')
           .select('id, rating_overall, review_text, created_at, users(full_name)')
@@ -86,9 +101,15 @@ export default function ContractorPublicProfile() {
           .select('*')
           .eq('contractor_id', id)
           .order('sort_order'),
+        supabase
+          .from('portfolio_jobs_public')
+          .select('id, title, service_type, general_location, completed_price, completed_at, photos')
+          .eq('contractor_id', id)
+          .order('completed_at', { ascending: false }),
       ]);
       setReviews(rev ?? []);
       setPortfolioItems((portfolio as PortfolioItem[]) ?? []);
+      setCompletedJobs((completed as CompletedJob[]) ?? []);
       setLoading(false);
     }
     load();
@@ -343,6 +364,59 @@ export default function ContractorPublicProfile() {
             </>
           )}
 
+          {/* Completed Work */}
+          <Text style={[s.sectionLabel, { color:C.textMuted }]}>
+            COMPLETED WORK {completedJobs.length > 0 && <Text style={{ color:C.orange }}>{completedJobs.length} jobs</Text>}
+          </Text>
+          {completedJobs.length > 0 ? (
+            <View style={{ gap:SP[3], marginBottom:SP[5] }}>
+              {completedJobs.map(job => (
+                <View key={job.id} style={[s.reviewCard, { backgroundColor:C.surface, borderColor:C.border }]}>
+                  <View style={{ flexDirection:'row', alignItems:'flex-start', justifyContent:'space-between', gap:SP[2], marginBottom:4 }}>
+                    <Text style={{ fontSize:TY.base, fontWeight:FW.bold, color:C.textPrimary, flex:1 }} numberOfLines={1}>
+                      {job.title || job.service_type || 'Completed job'}
+                    </Text>
+                    {job.completed_price != null && (
+                      <Text style={{ fontSize:TY.base, fontWeight:FW.black, color:'#22C55E' }}>
+                        ${Number(job.completed_price).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </Text>
+                    )}
+                  </View>
+                  <Text style={{ fontSize:TY.xs, color:C.textMuted, marginBottom: job.photos?.length ? SP[3] : 0 }}>
+                    {[
+                      job.service_type,
+                      job.general_location,
+                      job.completed_at ? new Date(job.completed_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : null,
+                    ].filter(Boolean).join(' · ')}
+                  </Text>
+                  {job.photos?.length > 0 && (
+                    <View style={{ flexDirection:'row', flexWrap:'wrap', gap: GRID_GAP }}>
+                      {job.photos.map((url, i) => (
+                        <TouchableOpacity
+                          key={i}
+                          style={{ width: COMPLETED_THUMB, height: COMPLETED_THUMB }}
+                          onPress={() => setCompletedLightbox({ url, job })}
+                          activeOpacity={0.85}
+                        >
+                          <Image
+                            source={{ uri: url }}
+                            style={{ width:'100%', height:'100%', borderRadius: R.sm }}
+                            resizeMode="cover"
+                          />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={[s.completedEmpty, { backgroundColor:C.surface, borderColor:C.border, marginBottom:SP[5] }]}>
+              <Ionicons name="images-outline" size={22} color={C.textMuted} />
+              <Text style={{ fontSize:TY.sm, color:C.textMuted, marginTop:SP[2] }}>No completed jobs published yet.</Text>
+            </View>
+          )}
+
           {/* Specializations */}
           {specs.length > 0 && (
             <>
@@ -463,6 +537,36 @@ export default function ContractorPublicProfile() {
           )}
         </TouchableOpacity>
       </Modal>
+
+      {/* Completed Work lightbox */}
+      <Modal visible={!!completedLightbox} animationType="fade" transparent>
+        <TouchableOpacity
+          style={{ flex:1, backgroundColor:'rgba(0,0,0,0.92)', alignItems:'center', justifyContent:'center' }}
+          activeOpacity={1}
+          onPress={() => setCompletedLightbox(null)}
+        >
+          {completedLightbox && (
+            <View style={{ width: SCREEN_W, alignItems: 'center' }}>
+              <Image
+                source={{ uri: completedLightbox.url }}
+                style={{ width: SCREEN_W, height: SCREEN_W }}
+                resizeMode="contain"
+              />
+              <View style={{ paddingHorizontal: SP[5], paddingTop: SP[3] }}>
+                <Text style={{ fontSize: TY.sm, color: '#fff', textAlign: 'center', lineHeight: 20 }}>
+                  {completedLightbox.job.title || completedLightbox.job.service_type}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={{ position: 'absolute', top: -48, right: SP[5], width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }}
+                onPress={() => setCompletedLightbox(null)}
+              >
+                <Ionicons name="close" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          )}
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -492,4 +596,5 @@ const s = StyleSheet.create({
   infoPill:        { flexDirection:'row', alignItems:'center', gap:5, borderRadius:999, borderWidth:0.5, paddingHorizontal:10, paddingVertical:6 },
   reviewCard:      { borderRadius:14, borderWidth:0.5, padding:14 },
   reviewerAvatar:  { width:34, height:34, borderRadius:17, alignItems:'center', justifyContent:'center' },
+  completedEmpty:  { borderRadius:14, borderWidth:0.5, paddingVertical:28, alignItems:'center', justifyContent:'center' },
 });
