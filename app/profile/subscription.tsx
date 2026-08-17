@@ -118,7 +118,7 @@ const PLAN_EMPLOYEE_LIMITS: Record<string, number> = {
 };
 
 function PlanCard({
-  plan, annual, current, onSelect, C, teamUsed,
+  plan, annual, current, onSelect, C, teamUsed, isDev,
 }: {
   plan: typeof PLANS[number];
   annual: boolean;
@@ -126,11 +126,13 @@ function PlanCard({
   onSelect: (key:string) => void;
   C: any;
   teamUsed: number;
+  isDev: boolean;
 }) {
-  const isCurrent  = current === plan.key;
-  const price      = annual ? (plan.annual / 12) : plan.monthly;
-  const savings    = plan.monthly > 0 ? Math.round((plan.monthly * 12 - plan.annual) / (plan.monthly * 12) * 100) : 0;
-  const scale      = useRef(new Animated.Value(1)).current;
+  const isCurrent    = current === plan.key;
+  const price        = annual ? (plan.annual / 12) : plan.monthly;
+  const savings      = plan.monthly > 0 ? Math.round((plan.monthly * 12 - plan.annual) / (plan.monthly * 12) * 100) : 0;
+  const isPaidLocked = plan.monthly > 0 && !isDev;
+  const scale        = useRef(new Animated.Value(1)).current;
 
   function handlePress() {
     Animated.sequence([
@@ -234,7 +236,13 @@ function PlanCard({
         </View>
 
         {/* CTA */}
-        {!isCurrent && (
+        {!isCurrent && isPaidLocked && (
+          <View style={[styles.planCta, { backgroundColor: 'transparent', borderColor: C.border, borderWidth: 1.5, opacity: 0.45 }]}>
+            <Ionicons name="time-outline" size={15} color={C.textMuted} />
+            <Text style={[styles.planCtaText, { color: C.textMuted }]}>Coming Soon</Text>
+          </View>
+        )}
+        {!isCurrent && !isPaidLocked && (
           <TouchableOpacity
             onPress={handlePress}
             style={[styles.planCta, {
@@ -545,6 +553,7 @@ export default function SubscriptionScreen() {
             onSelect={handleSelect}
             C={C}
             teamUsed={teamUsed}
+            isDev={userEmail === DEV_EMAIL}
           />
         ))}
 
