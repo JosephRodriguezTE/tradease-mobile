@@ -7,19 +7,39 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "environment": "development",
       "android": {
         "buildType": "apk"
       },
-      "env": {}
+      "env": {
+        "EXPO_PUBLIC_MAPBOX_IOS_TOKEN": "pk.eyJ1Ijoiam9zZXBoLXJvZHJpZ3VleiIsImEiOiJjbXN0eWZnZzMwM2dnMnpxMHprNXZxNmtvIn0.KBIJXOPxJHRm25ylRp2d-g",
+        "EXPO_PUBLIC_MAPBOX_ANDROID_TOKEN": "pk.eyJ1Ijoiam9zZXBoLXJvZHJpZ3VleiIsImEiOiJjbXN0eWRjbGcwZGt3MnpwcGRncWpkNWFvIn0.W_XvItGUAEEK23h7kLZJCA",
+        "EXPO_PUBLIC_MAPBOX_WEB_TOKEN": "pk.eyJ1Ijoiam9zZXBoLXJvZHJpZ3VleiIsImEiOiJjbXN0eWlzajAwNWg0MnlvbTRxeGhqdHc1In0.7nWUpTZ3_d8bZWtO0zLghA",
+        "EXPO_PUBLIC_MAPBOX_STYLE": "mapbox://styles/joseph-rodriguez/cmprb7d8p000k01s48w6u92j9"
+      }
     },
     "preview": {
       "distribution": "internal",
+      "environment": "preview",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_MAPBOX_IOS_TOKEN": "pk.eyJ1Ijoiam9zZXBoLXJvZHJpZ3VleiIsImEiOiJjbXN0eWZnZzMwM2dnMnpxMHprNXZxNmtvIn0.KBIJXOPxJHRm25ylRp2d-g",
+        "EXPO_PUBLIC_MAPBOX_ANDROID_TOKEN": "pk.eyJ1Ijoiam9zZXBoLXJvZHJpZ3VleiIsImEiOiJjbXN0eWRjbGcwZGt3MnpwcGRncWpkNWFvIn0.W_XvItGUAEEK23h7kLZJCA",
+        "EXPO_PUBLIC_MAPBOX_WEB_TOKEN": "pk.eyJ1Ijoiam9zZXBoLXJvZHJpZ3VleiIsImEiOiJjbXN0eWlzajAwNWg0MnlvbTRxeGhqdHc1In0.7nWUpTZ3_d8bZWtO0zLghA",
+        "EXPO_PUBLIC_MAPBOX_STYLE": "mapbox://styles/joseph-rodriguez/cmprb7d8p000k01s48w6u92j9"
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_MAPBOX_IOS_TOKEN": "pk.eyJ1Ijoiam9zZXBoLXJvZHJpZ3VleiIsImEiOiJjbXN0eWZnZzMwM2dnMnpxMHprNXZxNmtvIn0.KBIJXOPxJHRm25ylRp2d-g",
+        "EXPO_PUBLIC_MAPBOX_ANDROID_TOKEN": "pk.eyJ1Ijoiam9zZXBoLXJvZHJpZ3VleiIsImEiOiJjbXN0eWRjbGcwZGt3MnpwcGRncWpkNWFvIn0.W_XvItGUAEEK23h7kLZJCA",
+        "EXPO_PUBLIC_MAPBOX_WEB_TOKEN": "pk.eyJ1Ijoiam9zZXBoLXJvZHJpZ3VleiIsImEiOiJjbXN0eWlzajAwNWg0MnlvbTRxeGhqdHc1In0.7nWUpTZ3_d8bZWtO0zLghA",
+        "EXPO_PUBLIC_MAPBOX_STYLE": "mapbox://styles/joseph-rodriguez/cmprb7d8p000k01s48w6u92j9"
+      }
     }
   },
   "submit": {
