@@ -1639,7 +1639,14 @@ export default function CustomerWorkOrderScreen() {
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
             <TouchableOpacity
               style={[s.earlyStartBannerBtn, { backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.25)' }]}
-              onPress={() => setWo(prev => prev ? { ...prev, early_start_requested: false } : prev)}
+              onPress={async () => {
+                const { error } = await supabase
+                  .from('work_orders')
+                  .update({ early_start_requested: false })
+                  .eq('id', wo.id);
+                if (error) { Alert.alert('Error', 'Could not decline. Try again.'); return; }
+                setWo(prev => prev ? { ...prev, early_start_requested: false } : prev);
+              }}
               accessibilityRole="button"
               accessibilityLabel="Decline early start"
             >
