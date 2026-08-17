@@ -245,13 +245,13 @@ export default function CreateJobScreen() {
   };
 
 
-  const detectLocation = async () => {
+  const detectLocation = async (showAlertOnFail = true): Promise<boolean> => {
     setDetectingLocation(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Enable location in Settings.');
-        return;
+        if (showAlertOnFail) Alert.alert('Permission denied', 'Enable location in Settings.');
+        return false;
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       setDetectedCoords({ lat: loc.coords.latitude, lng: loc.coords.longitude });
@@ -259,18 +259,31 @@ export default function CreateJobScreen() {
       if (addr) {
         setAddress(`${addr.streetNumber ?? ''} ${addr.street ?? ''}, ${addr.city ?? ''}, ${addr.region ?? ''} ${addr.postalCode ?? ''}`.trim());
       }
+      return true;
     } catch {
-      Alert.alert('Error', 'Could not detect location.');
+      if (showAlertOnFail) Alert.alert('Error', 'Could not detect location.');
+      return false;
     } finally {
       setDetectingLocation(false);
     }
   };
 
   const toggleSortByNearest = async () => {
-    if (!sortByNearest && !detectedCoords) {
-      await detectLocation();
+    if (sortByNearest) {
+      setSortByNearest(false);
+      return;
     }
-    setSortByNearest(v => !v);
+    if (detectedCoords) {
+      setSortByNearest(true);
+      return;
+    }
+    const ok = await detectLocation(false);
+    if (ok) {
+      setSortByNearest(true);
+    } else {
+      setSortByNearest(false);
+      Alert.alert('Location Needed', 'Location permission needed to sort by distance.');
+    }
   };
 
   const sortedMatchedContractors = (sortByNearest && detectedCoords)
@@ -820,7 +833,7 @@ export default function CreateJobScreen() {
               <Text style={styles.sectionLabel}>JOB LOCATION</Text>
               <TouchableOpacity
                 style={styles.detectBtn}
-                onPress={detectLocation}
+                onPress={() => detectLocation()}
                 disabled={detectingLocation}
                 activeOpacity={0.85}
               >
