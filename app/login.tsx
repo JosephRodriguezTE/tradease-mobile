@@ -111,33 +111,6 @@ export default function LoginScreen() {
     setLoading(false);
   };
 
-  const handleGoogle = async () => {
-    try {
-      setLoading(true);
-      const { signInWithGoogle } = await import('../lib/googleAuth');
-      const result = await signInWithGoogle();
-      if (result.cancelled) {
-        setLoading(false);
-        return;
-      }
-      // New Google user → finish signup. Returning user → check 2FA then home.
-      if (result.isNewUser) {
-        router.replace('/signup');
-      } else {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await check2FA(user.id);
-        } else {
-          router.replace('/(tabs)');
-        }
-      }
-    } catch (err: any) {
-      Alert.alert('Google Sign In', err.message ?? 'Try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <View style={styles.container}>
       {/* Concrete bg */}
@@ -233,19 +206,6 @@ export default function LoginScreen() {
                 )}
               </LinearGradient>
             </TouchableOpacity>
-
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or continue with</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            <View style={styles.socialRow}>
-              <TouchableOpacity style={styles.socialBtn} onPress={handleGoogle} activeOpacity={0.85}>
-                <Text style={styles.socialIcon}>G</Text>
-                <Text style={styles.socialText}>Google</Text>
-              </TouchableOpacity>
-            </View>
 
             <TouchableOpacity
               style={styles.switchRow}
@@ -356,21 +316,6 @@ const styles = StyleSheet.create({
     color: '#0A0A0A', letterSpacing: 0.3,
   },
   submitArrow: { fontSize: 18, color: '#0A0A0A', fontFamily: FontFamily.black },
-
-  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#222' },
-  dividerText: { fontSize: 12, fontFamily: FontFamily.medium, color: '#666' },
-
-  socialRow: { flexDirection: 'row', gap: 10 },
-  socialBtn: {
-    flex: 1, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center',
-    gap: 8, height: 52, borderRadius: 14,
-    backgroundColor: 'rgba(20,20,20,0.85)',
-    borderWidth: 1.5, borderColor: '#222',
-  },
-  socialIcon: { fontSize: 16, color: Colors.white, fontFamily: FontFamily.bold },
-  socialText: { fontSize: 14, fontFamily: FontFamily.semibold, color: Colors.white },
 
   switchRow: { alignItems: 'center', paddingVertical: 4 },
   switchText: { fontSize: 14, fontFamily: FontFamily.medium, color: '#777' },

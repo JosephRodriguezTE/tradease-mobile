@@ -18,7 +18,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, FontFamily, Shadows } from '../constants/theme';
 import { useTheme } from '@/context/ThemeContext';
-import { isGoogleConfigured, signInWithGoogle } from '../lib/googleAuth';
 import { supabase } from '../lib/supabase';
 import { ALL_TRADES, TRADE_ICONS } from '../lib/tradeJobs';
 
@@ -199,31 +198,6 @@ export default function SignupScreen() {
   }, []);
 
   // ─── HANDLERS ─────────────────────────────────────────
-  const handleGoogle = async () => {
-    if (!isGoogleConfigured) {
-      Alert.alert(
-        'Google Sign-In coming soon',
-        'Google Sign-In coming soon — use email for now',
-      );
-      return;
-    }
-    try {
-      setLoading(true);
-      const result = await signInWithGoogle();
-      if (result.cancelled) { setLoading(false); return; }
-      if (result.isNewUser && result.prefill) {
-        setEmail(result.prefill.email);
-        setLegalName(result.prefill.fullName);
-        setGoogleMode(true);
-      } else {
-        router.replace('/(tabs)');
-      }
-    } catch (err: any) {
-      Alert.alert('Google Sign In', err.message ?? 'Try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleApple = async () => {
     Alert.alert('Coming Soon', 'Apple sign-up will be available once Apple Developer is configured.');
@@ -627,10 +601,6 @@ export default function SignupScreen() {
                 <TouchableOpacity style={styles.socialBtn} onPress={handleApple} activeOpacity={0.85}>
                   <Text style={styles.socialIcon}>🍎</Text>
                   <Text style={styles.socialText}>Apple</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.socialBtn} onPress={handleGoogle} activeOpacity={0.85}>
-                  <Text style={styles.socialIcon}>G</Text>
-                  <Text style={styles.socialText}>Google</Text>
                 </TouchableOpacity>
               </View>
             )}

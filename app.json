@@ -5,10 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/tradease-icon.png",
-    "scheme": [
-      "tradease",
-      "com.googleusercontent.apps.your-client-id-here"
-    ],
+    "scheme": "tradease",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/tradeaselogo.png",
@@ -55,8 +52,7 @@
         {
           "action": "VIEW",
           "data": [
-            { "scheme": "tradease" },
-            { "scheme": "com.googleusercontent.apps.your-client-id-here" }
+            { "scheme": "tradease" }
           ],
           "category": [
             "BROWSABLE",
