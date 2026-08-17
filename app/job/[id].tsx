@@ -861,28 +861,6 @@ export default function JobDetailScreen() {
           </>
         )}
 
-        {/* Escrow funding required — customer action */}
-        {isCustomer && booking.status === 'confirmed' && (
-          <View style={[s.noticeCard, { backgroundColor: 'rgba(56,189,248,0.07)', borderColor: 'rgba(56,189,248,0.3)' }]}>
-            <Ionicons name="wallet-outline" size={18} color="#38BDF8" />
-            <View style={{ flex: 1 }}>
-              <Text style={[s.noticeTitle, { color: '#38BDF8' }]}>Fund escrow to confirm payment</Text>
-              <Text style={[s.noticeSub, { color: C.textSecondary }]}>
-                Payment must be placed in escrow before the job starts.
-                {booking.scheduled_at
-                  ? ` Due by ${new Date(booking.scheduled_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}.`
-                  : ' Funds are released only after you approve the completed work.'}
-              </Text>
-              <TouchableOpacity
-                style={{ marginTop: 10, backgroundColor: 'rgba(56,189,248,0.12)', borderRadius: 10, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(56,189,248,0.3)' }}
-                onPress={() => Alert.alert('Payment Coming Soon', 'Escrow funding will be available once payment setup is complete.')}
-              >
-                <Text style={{ fontSize: 13, fontWeight: Font.black, color: '#38BDF8' }}>Fund Escrow — Coming Soon</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
         {/* Escrow held notice — for active/in-progress */}
         {(booking.status === 'in_progress' || booking.status === 'accepted') && (
           <View style={[s.noticeCard, { backgroundColor: 'rgba(34,197,94,0.06)', borderColor: 'rgba(34,197,94,0.2)' }]}>
