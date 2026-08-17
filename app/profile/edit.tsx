@@ -189,6 +189,38 @@ function ContractorEditForm() {
     }
   };
 
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This permanently deletes your account and all data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete My Account', style: 'destructive', onPress: async () => {
+            if (!user) return;
+            const { error } = await supabase.from('account_deletion_requests').insert({
+              user_id: user.id,
+              email:   user.email,
+              role:    'contractor',
+            });
+            if (error) {
+              Alert.alert('Error', "Couldn't submit your deletion request. Please try again.");
+              return;
+            }
+            Alert.alert(
+              'Account Scheduled for Deletion',
+              "Your account is scheduled for deletion and will be permanently removed within 30 days. You'll be signed out now.",
+              [{ text: 'OK', onPress: async () => {
+                await supabase.auth.signOut();
+                router.replace('/login');
+              }}],
+            );
+          },
+        },
+      ],
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingWrap}>
@@ -295,7 +327,7 @@ function ContractorEditForm() {
           <Text style={styles.dangerTitle}>DANGER ZONE</Text>
           <TouchableOpacity
             style={styles.dangerBtn}
-            onPress={() => Alert.alert('Delete Account', 'This action is irreversible. Contact joseph.rodriguez.te@gmail.com to delete your account.')}
+            onPress={handleDeleteAccount}
           >
             <Text style={styles.dangerBtnText}>Delete Account</Text>
           </TouchableOpacity>
@@ -391,6 +423,38 @@ function CustomerEditForm() {
     }
   };
 
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This permanently deletes your account and all data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete My Account', style: 'destructive', onPress: async () => {
+            if (!user) return;
+            const { error } = await supabase.from('account_deletion_requests').insert({
+              user_id: user.id,
+              email:   user.email,
+              role:    'customer',
+            });
+            if (error) {
+              Alert.alert('Error', "Couldn't submit your deletion request. Please try again.");
+              return;
+            }
+            Alert.alert(
+              'Account Scheduled for Deletion',
+              "Your account is scheduled for deletion and will be permanently removed within 30 days. You'll be signed out now.",
+              [{ text: 'OK', onPress: async () => {
+                await supabase.auth.signOut();
+                router.replace('/login');
+              }}],
+            );
+          },
+        },
+      ],
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingWrap}>
@@ -445,7 +509,7 @@ function CustomerEditForm() {
           <Text style={styles.dangerTitle}>DANGER ZONE</Text>
           <TouchableOpacity
             style={styles.dangerBtn}
-            onPress={() => Alert.alert('Delete Account', 'This action is irreversible. Contact joseph.rodriguez.te@gmail.com to delete your account.')}
+            onPress={handleDeleteAccount}
           >
             <Text style={styles.dangerBtnText}>Delete Account</Text>
           </TouchableOpacity>
