@@ -501,7 +501,7 @@ function ContractorCard({ contractor, woId, collapsed, onToggle }: {
             <Text style={s.cActionTxt}>Call</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity style={s.cActionBtn} onPress={() => router.push(`/chat/${woId}` as any)}>
+        <TouchableOpacity style={s.cActionBtn} onPress={() => router.push(`/work-order/chat?work_order_id=${woId}` as any)}>
           <Ionicons name="chatbubble-outline" size={16} color={O.orange} />
           <Text style={s.cActionTxt}>Message</Text>
         </TouchableOpacity>

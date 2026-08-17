@@ -550,6 +550,7 @@ function CustomerSection({
 }: {
   wo: WoData; customer: any; collapsed: boolean; onToggle: () => void;
 }) {
+  const router = useRouter();
   const jobLat = wo.booking?.job_lat ?? null;
   const jobLng = wo.booking?.job_lng ?? null;
   const address = wo.job_address || wo.booking?.job_address || null;
@@ -579,6 +580,12 @@ function CustomerSection({
               <Ionicons name="call-outline" size={18} color={G.green} />
             </TouchableOpacity>
           )}
+          <TouchableOpacity
+            style={[s.contactBtn, { borderColor: 'rgba(255,98,0,0.3)', backgroundColor: 'rgba(255,98,0,0.12)' }]}
+            onPress={() => router.push(`/work-order/chat?work_order_id=${wo.id}` as any)}
+          >
+            <Ionicons name="chatbubble-outline" size={18} color={G.orange} />
+          </TouchableOpacity>
         </View>
       </View>
 
