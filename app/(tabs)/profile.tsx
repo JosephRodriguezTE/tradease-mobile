@@ -760,6 +760,13 @@ function ContractorProfileView({ profile, isOwner, teamActiveCount }: {
             onPress={() => router.push('/profile/portfolio' as any)}
           />
           <View style={styles.menuDivider} />
+          <MenuItem
+            icon="🏆"
+            label="Completed Work"
+            subtitle="Manage what's shown on your public profile"
+            onPress={() => router.push('/profile/completed-work' as any)}
+          />
+          <View style={styles.menuDivider} />
           {profile?.verification_status === 'approved'
             ? <MenuItem
                 icon="✅"

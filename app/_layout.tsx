@@ -114,6 +114,7 @@ export default function RootLayout() {
           <Stack.Screen name="profile/subscription" />
           <Stack.Screen name="profile/calendar" />
           <Stack.Screen name="profile/portfolio" />
+          <Stack.Screen name="profile/completed-work" />
           <Stack.Screen name="profile/analytics" />
           <Stack.Screen name="profile/earnings" />
 
