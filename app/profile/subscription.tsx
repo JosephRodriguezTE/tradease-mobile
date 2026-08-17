@@ -438,14 +438,20 @@ export default function SubscriptionScreen() {
     load();
   }, []);
 
-  async function applyPlanChange(plan: string) {
+  async function applyPlanChange(plan: string): Promise<boolean> {
     setUpgrading(true);
     try {
       const { data:{ user } } = await supabase.auth.getUser();
-      if (user) {
-        await supabase.from('contractors').update({ plan }).eq('id', user.id);
-        setCurrentPlan(plan);
+      if (!user) return false;
+
+      const { error } = await supabase.from('contractors').update({ plan }).eq('id', user.id);
+      if (error) {
+        Alert.alert('Update Failed', "Couldn't update your plan. Please try again.");
+        return false;
       }
+
+      setCurrentPlan(plan);
+      return true;
     } finally {
       setUpgrading(false);
     }
@@ -472,10 +478,12 @@ export default function SubscriptionScreen() {
 
   async function handleConfirm() {
     if (!confirmPlan) return;
-    await applyPlanChange(confirmPlan.key);
     const label = confirmPlan.label;
+    const ok = await applyPlanChange(confirmPlan.key);
     setConfirmPlan(null);
-    Alert.alert('Plan Activated', `You are now on ${label}.`);
+    if (ok) {
+      Alert.alert('Plan Activated', `You are now on ${label}.`);
+    }
   }
 
   if (loading) {
