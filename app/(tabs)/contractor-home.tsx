@@ -855,7 +855,7 @@ export default function ContractorHomeScreen() {
     if (accept) {
       const { error } = await supabase
         .from('job_offers')
-        .update({ status: 'accepted', contractor_final: 'accepted' })
+        .update({ status: 'accepted', contractor_final: 'accepted', final_price: counterPrice })
         .eq('id', offerId);
       if (error) { Alert.alert('Error', 'Could not accept. Try again.'); return; }
 
