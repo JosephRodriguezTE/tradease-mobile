@@ -97,7 +97,7 @@ interface WoMedia {
 }
 
 interface PaymentIntent {
-  id: string; status: string; amount_cents: number;
+  id: string; status: string; amount_cents: number; captured_at: string | null;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -1131,7 +1131,7 @@ export default function ContractorWorkOrderScreen() {
       supabase.from('users').select('id,full_name,avatar_url,phone').eq('id', woData.customer_id).maybeSingle(),
       supabase.from('payment_line_items').select('*').eq('work_order_id', woData.id).order('created_at'),
       woData.payment_intent_id
-        ? supabase.from('payment_intents').select('id,status,amount_cents').eq('id', woData.payment_intent_id).maybeSingle()
+        ? supabase.from('payment_intents').select('id,status,amount_cents,captured_at').eq('id', woData.payment_intent_id).maybeSingle()
         : { data: null },
       supabase.from('work_progress_items').select('*').eq('work_order_id', woData.id).order('sort_order'),
       supabase.from('work_order_events').select('*').eq('work_order_id', woData.id).order('created_at', { ascending: false }),
@@ -1179,7 +1179,7 @@ export default function ContractorWorkOrderScreen() {
           const updated = p.new as any;
           setWo(prev => prev ? { ...prev, ...updated } : prev);
           if (updated.wo_status === 'completed') {
-            supabase.from('payment_intents').select('id,status,amount_cents').eq('id', updated.payment_intent_id ?? '').maybeSingle()
+            supabase.from('payment_intents').select('id,status,amount_cents,captured_at').eq('id', updated.payment_intent_id ?? '').maybeSingle()
               .then(({ data }) => {
                 setPI(data ?? null);
                 setPaydayCents(data?.amount_cents ?? 0);
@@ -1479,7 +1479,23 @@ export default function ContractorWorkOrderScreen() {
   // Both required — completed alone doesn't mean payment was ever captured.
   const canAddToPortfolio = wo.wo_status === 'completed' && paymentIntent?.status === 'captured';
 
-  const portfolioMedia = media.filter(m => m.kind === 'before' || m.kind === 'after');
+  // Same formula BillSection displays to the contractor — the real final price,
+  // not payment_intents.amount_cents (which can be stale/zero if capture was skipped).
+  const approvedLineItemsTotal = lineItems
+    .filter(i => i.approval_status !== 'rejected')
+    .reduce((s, i) => s + i.amount_cents, 0);
+  const jobTotalCents = basePrice * 100 + approvedLineItemsTotal;
+
+  // City only — never the street address.
+  const generalLocation = (() => {
+    const addr = wo.booking?.job_address;
+    if (!addr) return null;
+    const parts = addr.split(',').map(p => p.trim()).filter(Boolean);
+    return parts.length >= 2 ? parts[parts.length - 2] : (parts[0] ?? null);
+  })();
+
+  // Never receipt/document — those aren't safe to show publicly.
+  const portfolioMedia = media.filter(m => m.kind === 'before' || m.kind === 'after' || m.kind === 'progress');
 
   function openPortfolioCuration() {
     setPortfolioSelectedIds(new Set(portfolioMedia.filter(m => m.kind === 'after').map(m => m.id)));
@@ -1522,12 +1538,12 @@ export default function ContractorWorkOrderScreen() {
       const { error: insErr } = await supabase.from('portfolio_jobs').insert({
         contractor_id:            user.id,
         original_work_order_id:   wo.id,
-        service_type:             trade,
+        service_type:             wo.service_type ?? trade,
         title:                    portfolioTitle.trim() || trade,
         description:              portfolioDescription.trim() || null,
-        completed_price:          paymentIntent?.amount_cents != null ? paymentIntent.amount_cents / 100 : null,
-        completed_at:             new Date().toISOString(),
-        general_location:         wo.booking?.job_address?.split(',').slice(-2).join(',').trim() || null,
+        completed_price:          jobTotalCents / 100,
+        completed_at:             paymentIntent?.captured_at ?? new Date().toISOString(),
+        general_location:         generalLocation,
         photos:                   photoUrls,
         is_published:             true,
       });
@@ -1804,9 +1820,22 @@ export default function ContractorWorkOrderScreen() {
           <View style={s.modalSheet}>
             <View style={s.modalHandle} />
             <Text style={s.modalTitle}>Add to Portfolio</Text>
-            <Text style={s.modalSub}>{trade} · ${((paymentIntent?.amount_cents ?? 0) / 100).toFixed(2)}</Text>
+            <Text style={s.modalSub}>
+              {(wo.service_type ?? trade)} · ${(jobTotalCents / 100).toFixed(2)}
+              {generalLocation ? ` · ${generalLocation}` : ''}
+              {paymentIntent?.captured_at
+                ? ` · ${new Date(paymentIntent.captured_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                : ''}
+            </Text>
 
-            <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+            <View style={s.privacyNotice}>
+              <Ionicons name="shield-checkmark-outline" size={14} color={G.txt2} />
+              <Text style={s.privacyNoticeTxt}>
+                This will be shown publicly on your profile. Only the trade, price, city, date, and the photos you select below are included — the customer's name, address, and contact details are never shown.
+              </Text>
+            </View>
+
+            <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
               <Text style={s.curationLabel}>PHOTOS</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
                 {portfolioMedia.map(m => {
@@ -2019,7 +2048,9 @@ const s = StyleSheet.create({
   modalSheet:    { backgroundColor: G.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 32, borderWidth: 0.5, borderColor: G.border, borderBottomWidth: 0, maxHeight: '90%' },
   modalHandle:   { width: 40, height: 4, borderRadius: 2, backgroundColor: G.border, alignSelf: 'center', marginBottom: 14 },
   modalTitle:    { fontSize: 20, fontWeight: '800', color: G.txt, marginBottom: 2 },
-  modalSub:      { fontSize: 13, color: G.txt2, marginBottom: 16 },
+  modalSub:      { fontSize: 13, color: G.txt2, marginBottom: 12 },
+  privacyNotice:    { flexDirection: 'row', gap: 8, backgroundColor: G.cardAlt, borderRadius: 10, padding: 10, marginBottom: 14, alignItems: 'flex-start' },
+  privacyNoticeTxt: { flex: 1, fontSize: 11.5, color: G.txt2, lineHeight: 16 },
   curationLabel: { fontSize: 10, fontWeight: '800', color: G.txt3, letterSpacing: 0.8, marginBottom: 6 },
   curationThumb: { width: 72, height: 72, borderRadius: 10, borderWidth: 2, borderColor: 'transparent' },
   curationThumbSelected: { borderColor: G.orange },
