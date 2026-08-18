@@ -26,6 +26,8 @@ const { width } = Dimensions.get('window');
 // Bump this when the Terms of Service / Privacy Policy text changes.
 const CURRENT_TOS_VERSION = '2026-08-21';
 
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
 // ─── FOCUS INPUT ────────────────────────────────────────
 function FocusInput({
   label, value, onChangeText, placeholder, secureTextEntry,
@@ -62,6 +64,46 @@ function FocusInput({
         {rightElement && <View style={inputStyles.right}>{rightElement}</View>}
       </Animated.View>
       {hint && <Text style={inputStyles.hint}>{hint}</Text>}
+    </View>
+  );
+}
+
+// ─── MONTH/YEAR PICKER ──────────────────────────────────
+function MonthYearPicker({
+  month, year, onSelect,
+}: {
+  month: number; year: number;
+  onSelect: (m: number, y: number) => void;
+}) {
+  const now = new Date();
+  const [displayYear, setDisplayYear] = useState(year || now.getFullYear());
+
+  return (
+    <View style={pickerStyles.box}>
+      <View style={pickerStyles.yearRow}>
+        <TouchableOpacity onPress={() => setDisplayYear(y => y - 1)} style={pickerStyles.yearBtn}>
+          <Text style={pickerStyles.yearArrow}>‹</Text>
+        </TouchableOpacity>
+        <Text style={pickerStyles.yearText}>{displayYear}</Text>
+        <TouchableOpacity onPress={() => setDisplayYear(y => y + 1)} style={pickerStyles.yearBtn}>
+          <Text style={pickerStyles.yearArrow}>›</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={pickerStyles.monthGrid}>
+        {MONTHS.map((m, i) => {
+          const isSelected = i + 1 === month && displayYear === year;
+          const isPast = new Date(displayYear, i) < new Date(now.getFullYear(), now.getMonth());
+          return (
+            <TouchableOpacity
+              key={m}
+              onPress={() => !isPast && onSelect(i + 1, displayYear)}
+              style={[pickerStyles.monthBtn, isSelected && pickerStyles.monthBtnActive, isPast && pickerStyles.monthBtnPast]}
+            >
+              <Text style={[pickerStyles.monthText, isSelected && pickerStyles.monthTextActive]}>{m}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -139,7 +181,9 @@ export default function SignupScreen() {
   const [businessAddress, setBusinessAddress] = useState('');
   const [serviceArea, setServiceArea] = useState('');
   const [licenseNumber, setLicenseNumber] = useState('');
-  const [licenseExpiration, setLicenseExpiration] = useState('');
+  const [expiryMonth, setExpiryMonth] = useState(0);
+  const [expiryYear, setExpiryYear] = useState(0);
+  const [showExpiryPicker, setShowExpiryPicker] = useState(false);
   const [licenseCounty, setLicenseCounty] = useState('');
 
   // Customer
@@ -263,6 +307,9 @@ export default function SignupScreen() {
         });
         if (insErr) console.log('users insert error:', insErr);
       } else {
+        const licenseExpirationDate = expiryMonth > 0
+          ? `${expiryYear}-${String(expiryMonth).padStart(2, '0')}-01`
+          : null;
         const { error: insErr } = await supabase.from('contractors').insert({
           id: userId,
           email: email.trim().toLowerCase(),
@@ -273,7 +320,7 @@ export default function SignupScreen() {
           address: businessAddress.trim() || null,
           service_area: serviceArea.trim() || null,
           license_number: licenseNumber.trim() || null,
-          license_expiration: licenseExpiration.trim() || null,
+          license_expiration: licenseExpirationDate,
           license_county: licenseCounty.trim() || null,
           license_verified: !!licenseNumber.trim(),
           allow_notifications: allowNotifications,
@@ -542,12 +589,25 @@ export default function SignupScreen() {
                     placeholder="Enter it exactly as issued"
                     hint="No need to reformat it — dashes or spaces are fine either way"
                   />
-                  <FocusInput
-                    label="Expiration Date"
-                    value={licenseExpiration}
-                    onChangeText={setLicenseExpiration}
-                    placeholder="YYYY-MM-DD"
-                  />
+                  <View style={inputStyles.wrap}>
+                    <Text style={inputStyles.label}>Expiration Date</Text>
+                    <TouchableOpacity
+                      style={[inputStyles.box, { borderColor: expiryMonth > 0 ? Colors.orange : 'rgba(255,255,255,0.08)', marginBottom: showExpiryPicker ? 8 : 0 }]}
+                      onPress={() => setShowExpiryPicker(v => !v)}
+                    >
+                      <Text style={[inputStyles.input, { paddingVertical: 0, color: expiryMonth > 0 ? Colors.white : '#3F3F3F' }]}>
+                        {expiryMonth > 0 ? `${MONTHS[expiryMonth - 1]} ${expiryYear}` : 'Select expiry date'}
+                      </Text>
+                      <Text style={{ fontSize: 16 }}>📅</Text>
+                    </TouchableOpacity>
+                    {showExpiryPicker && (
+                      <MonthYearPicker
+                        month={expiryMonth}
+                        year={expiryYear}
+                        onSelect={(m, y) => { setExpiryMonth(m); setExpiryYear(y); setShowExpiryPicker(false); }}
+                      />
+                    )}
+                  </View>
                   <FocusInput
                     label="County Issued"
                     value={licenseCounty}
@@ -897,6 +957,29 @@ const inputStyles = StyleSheet.create({
   inputDisabled: { color: '#888' },
   right: { paddingLeft: 10 },
   hint: { fontSize: 11, fontFamily: FontFamily.medium, color: '#555' },
+});
+
+const pickerStyles = StyleSheet.create({
+  box: {
+    backgroundColor: '#0F0F0F', borderRadius: 12, borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.08)', padding: 14, marginTop: -2, marginBottom: 6,
+  },
+  yearRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 12, paddingHorizontal: 4,
+  },
+  yearBtn: { padding: 8 },
+  yearArrow: { fontSize: 20, fontFamily: FontFamily.bold, color: Colors.white },
+  yearText: { fontSize: 16, fontFamily: FontFamily.black, color: Colors.white },
+  monthGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  monthBtn: {
+    width: '30%', paddingVertical: 12, borderRadius: 10, alignItems: 'center',
+    backgroundColor: '#161616', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+  },
+  monthBtnActive: { backgroundColor: Colors.orange, borderColor: Colors.orange },
+  monthBtnPast: { opacity: 0.3 },
+  monthText: { fontSize: 13, fontFamily: FontFamily.semibold, color: Colors.white },
+  monthTextActive: { color: '#0A0A0A' },
 });
 
 const toggleStyles = StyleSheet.create({
