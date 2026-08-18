@@ -539,7 +539,8 @@ export default function SignupScreen() {
                     label="License Number"
                     value={licenseNumber}
                     onChangeText={setLicenseNumber}
-                    placeholder="e.g. NY-PL-12345678"
+                    placeholder="Enter it exactly as issued"
+                    hint="No need to reformat it — dashes or spaces are fine either way"
                   />
                   <FocusInput
                     label="Expiration Date"

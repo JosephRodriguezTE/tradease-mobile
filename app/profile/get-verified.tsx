@@ -154,9 +154,9 @@ function UploadField({
 
 // ─── Text Field ───────────────────────────────────────────────────────────────
 
-function Field({ label, value, onChangeText, placeholder, keyboardType = 'default', maxLength, C }: {
+function Field({ label, value, onChangeText, placeholder, keyboardType = 'default', maxLength, hint, C }: {
   label: string; value: string; onChangeText: (t: string) => void;
-  placeholder: string; keyboardType?: any; maxLength?: number; C: AppColors;
+  placeholder: string; keyboardType?: any; maxLength?: number; hint?: string; C: AppColors;
 }) {
   return (
     <View style={{ marginBottom: SP[4] }}>
@@ -172,6 +172,7 @@ function Field({ label, value, onChangeText, placeholder, keyboardType = 'defaul
         keyboardType={keyboardType}
         maxLength={maxLength}
       />
+      {hint && <Text style={{ fontSize: TY.xs, color: C.textMuted, marginTop: SP[2] }}>{hint}</Text>}
     </View>
   );
 }
@@ -400,7 +401,7 @@ export default function GetVerifiedScreen() {
 
     // Step 2 — License
     <>
-      <Field label="License Number" value={licenseNumber} onChangeText={setLicenseNumber} placeholder="e.g. PL-123456" maxLength={30} C={C} />
+      <Field label="License Number" value={licenseNumber} onChangeText={setLicenseNumber} placeholder="Enter it exactly as issued" maxLength={30} hint="No need to reformat it — dashes or spaces are fine either way" C={C} />
       <View style={{ marginBottom: SP[4] }}>
         <Text style={{ fontSize: TY.xs, fontWeight: Font.black, color: C.textSecondary, letterSpacing: 0.8, marginBottom: SP[2] }}>ISSUING STATE</Text>
         <TouchableOpacity
