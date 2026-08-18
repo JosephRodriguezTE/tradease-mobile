@@ -254,8 +254,19 @@ export default function JobDetailScreen() {
   // Realtime offer updates
   useEffect(() => {
     if (!id) return;
+
+    const channelName = `job_offer_detail:${id}`;
+
+    // Purge any stale channel with the same name before subscribing.
+    // React StrictMode double-invokes effects; Supabase throws if .on() is
+    // called on an already-subscribed channel, which is what caused the
+    // "cannot add postgres_changes callbacks after subscribe()" crash.
+    supabase.getChannels().forEach(ch => {
+      if (ch.topic === `realtime:${channelName}`) supabase.removeChannel(ch);
+    });
+
     const ch = supabase
-      .channel(`job_offer_detail:${id}`)
+      .channel(channelName)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'job_offers',
         filter: `booking_id=eq.${id}`,

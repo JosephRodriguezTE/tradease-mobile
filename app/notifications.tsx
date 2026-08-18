@@ -100,8 +100,18 @@ export default function NotificationsScreen() {
     load();
     if (!user) return;
 
+    const channelName = `notifications:${user.id}`;
+
+    // Purge any stale channel with the same name before subscribing.
+    // React StrictMode double-invokes effects; Supabase throws if .on() is
+    // called on an already-subscribed channel, which is what caused the
+    // "cannot add postgres_changes callbacks after subscribe()" crash.
+    supabase.getChannels().forEach(ch => {
+      if (ch.topic === `realtime:${channelName}`) supabase.removeChannel(ch);
+    });
+
     const ch = supabase
-      .channel(`notifications:${user.id}`)
+      .channel(channelName)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',

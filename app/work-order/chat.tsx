@@ -178,8 +178,18 @@ export default function WorkOrderChatScreen() {
   useEffect(() => {
     if (!work_order_id || !user) return;
 
+    const channelName = `wo_chat_${work_order_id}`;
+
+    // Purge any stale channel with the same name before subscribing.
+    // React StrictMode double-invokes effects; Supabase throws if .on() is
+    // called on an already-subscribed channel, which is what caused the
+    // "cannot add postgres_changes callbacks after subscribe()" crash.
+    supabase.getChannels().forEach(ch => {
+      if (ch.topic === `realtime:${channelName}`) supabase.removeChannel(ch);
+    });
+
     const ch = supabase
-      .channel(`wo_chat_${work_order_id}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'work_order_messages', filter: `work_order_id=eq.${work_order_id}` },
