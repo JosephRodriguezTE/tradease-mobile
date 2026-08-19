@@ -8,6 +8,7 @@ import {
   Inter_900Black,
   useFonts,
 } from '@expo-google-fonts/inter';
+import * as Sentry from '@sentry/react-native';
 import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
@@ -16,6 +17,12 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastProvider } from '../components/Toast';
 import { useNotifications } from '../hooks/useNotifications';
 import { supabase } from '../lib/supabase';
+
+// Empty/undefined DSN makes this a documented no-op — safe before EXPO_PUBLIC_SENTRY_DSN is set.
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  sendDefaultPii: false,
+});
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -40,7 +47,7 @@ function NotificationsBootstrap() {
   return null;
 }
 
-export default function RootLayout() {
+function RootLayout() {
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -144,3 +151,5 @@ export default function RootLayout() {
     </ThemeProvider>
   );
 }
+
+export default Sentry.wrap(RootLayout);

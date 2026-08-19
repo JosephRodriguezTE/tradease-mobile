@@ -85,7 +85,8 @@
         }
       ],
       "expo-font",
-      "@rnmapbox/maps"
+      "@rnmapbox/maps",
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": true
