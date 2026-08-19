@@ -1,14 +1,20 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CalendarCheck, MapPinned, MessageCircle, Settings as SettingsIcon, User } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/context/ThemeContext';
+import { useAuth } from '../../hooks/useAuth';
 import { useRole } from '../../hooks/useRole';
 import { useUnreadMessages } from '../../hooks/useUnreadMessages';
 import { supabase } from '../../lib/supabase';
 import TwoFAEnrollSheet from '../../components/TwoFAEnrollSheet';
+import PreLaunchModal from '@/components/PreLaunchModal';
+
+// Must match PreLaunchModal's own internal STORAGE_KEY — read here only to
+// sequence it ahead of the 2FA prompt below, never written from this file.
+const PRELAUNCH_SEEN_KEY = 'tradease_prelaunch_seen_v1';
 
 function TabIcon({ Icon, focused }: { Icon: any; focused: boolean }) {
   const { colors: Colors } = useTheme();
@@ -27,8 +33,10 @@ function TabIcon({ Icon, focused }: { Icon: any; focused: boolean }) {
 }
 
 export default function TabsLayout() {
+  const router = useRouter();
   const { colors: Colors } = useTheme();
-  const { isContractor } = useRole();
+  const { isContractor, loading: roleLoading } = useRole();
+  const { user } = useAuth();
   const { unreadCount } = useUnreadMessages();
 
   const [enrollVisible, setEnrollVisible] = useState(false);
@@ -39,6 +47,11 @@ export default function TabsLayout() {
     async function maybePrompt() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      // Defer to the pre-launch sheet this mount if it hasn't been seen yet —
+      // both are full-screen Modals and must not stack on top of each other.
+      const prelaunchSeen = await AsyncStorage.getItem(PRELAUNCH_SEEN_KEY);
+      if (!prelaunchSeen) return;
 
       const storageKey = `twofa_prompted:${user.id}`;
       const alreadyShown = await AsyncStorage.getItem(storageKey);
@@ -60,6 +73,11 @@ export default function TabsLayout() {
     }
     maybePrompt();
   }, []);
+
+  const firstName = (() => {
+    const full: string = user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? '';
+    return full.split(' ')[0] || undefined;
+  })();
 
   return (
     <>
@@ -164,6 +182,14 @@ export default function TabsLayout() {
       userEmail={userEmail}
       onEnabled={() => {}}
     />
+
+    {!roleLoading && (
+      <PreLaunchModal
+        role={isContractor ? 'contractor' : 'customer'}
+        firstName={firstName}
+        onPrimary={() => router.push(isContractor ? '/profile/get-verified' : '/find-contractor')}
+      />
+    )}
     </>
   );
 }
