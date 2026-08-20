@@ -158,26 +158,45 @@ export function isTracking(): boolean {
 }
 
 // ── NEARBY QUERIES (uses Supabase RPCs) ───────────────────
+export interface NearbyContractor {
+  id: string;
+  company_name: string;
+  trade_type: string | null;
+  location: string | null;
+  service_area: string | null;
+  rating: number | null;
+  review_count: number | null;
+  verified: boolean | null;
+  verification_status: string | null;
+  is_available: boolean | null;
+  plan: string | null;
+  avatar_url: string | null;
+  banner_url: string | null;
+  specializations: string[] | null;
+  years_in_business: number | null;
+  distance_miles: number;
+}
+
 export async function getNearbyContractors(
   center: Coords,
   options: {
     radiusMiles?: number;
     trade?: string | null;
-    onlyAvailable?: boolean;
+    specialtyFilter?: string | null;
   } = {}
-) {
-  const { data, error } = await supabase.rpc('nearby_contractors', {
-    customer_lat: center.lat,
-    customer_lng: center.lng,
-    max_distance_miles: options.radiusMiles ?? 50,
-    filter_trade: options.trade ?? null,
-    only_available: options.onlyAvailable ?? true,
+): Promise<NearbyContractor[]> {
+  const { data, error } = await supabase.rpc('contractors_nearby', {
+    user_lat: center.lat,
+    user_lng: center.lng,
+    max_miles: options.radiusMiles ?? 50,
+    trade_filter: options.trade ?? null,
+    specialty_filter: options.specialtyFilter ?? null,
   });
   if (error) {
-    console.log('nearby_contractors error:', error);
+    console.log('contractors_nearby error:', error);
     return [];
   }
-  return data ?? [];
+  return (data ?? []) as NearbyContractor[];
 }
 
 export async function getNearbyJobs(
