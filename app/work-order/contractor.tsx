@@ -953,11 +953,15 @@ function SupportSection({ wo, collapsed, onToggle }: { wo: WoData; collapsed: bo
           text: 'Open Dispute', style: 'destructive',
           onPress: async () => {
             setDisputing(true);
-            const { error } = await supabase.functions.invoke('work-order-dispute', {
+            const { data, error } = await supabase.functions.invoke('work-order-dispute', {
               body: { work_order_id: wo.id, reason: 'Contractor opened dispute' },
             });
             setDisputing(false);
             if (error) { Alert.alert('Error', 'Could not open dispute. Please email support@tradease.app'); return; }
+            if (data?.already_open) {
+              Alert.alert('Dispute Already Open', 'A dispute is already open on this job. Our team is reviewing it.');
+              return;
+            }
             Alert.alert('Dispute Opened', 'Our team will review within 24 hours.');
           },
         },
