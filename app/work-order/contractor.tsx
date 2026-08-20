@@ -56,8 +56,8 @@ type WoStatus =
   | 'change_order_pending' | 'awaiting_approval'
   | 'payment_releasing' | 'completed' | 'cancelled' | 'disputed';
 
-type SectionKey = 'stepper' | 'bill' | 'checklist' | 'customer' | 'map' | 'media' | 'timeline' | 'payment';
-const ALL_SECTIONS: SectionKey[] = ['stepper', 'bill', 'checklist', 'customer', 'map', 'media', 'timeline', 'payment'];
+type SectionKey = 'stepper' | 'bill' | 'checklist' | 'customer' | 'map' | 'media' | 'timeline' | 'payment' | 'support';
+const ALL_SECTIONS: SectionKey[] = ['stepper', 'bill', 'checklist', 'customer', 'map', 'media', 'timeline', 'payment', 'support'];
 
 interface WoData {
   id: string; booking_id: string; contractor_id: string; customer_id: string;
@@ -937,6 +937,90 @@ function PaymentSection({ pi, basePrice, collapsed, onToggle }: { pi: PaymentInt
   );
 }
 
+// ─── SupportSection ───────────────────────────────────────────────────────────
+
+function SupportSection({ wo, collapsed, onToggle }: { wo: WoData; collapsed: boolean; onToggle: () => void }) {
+  const canDispute = ['awaiting_approval', 'payment_releasing', 'completed'].includes(wo.wo_status);
+  const [disputing, setDisputing] = useState(false);
+
+  async function openDispute() {
+    Alert.alert(
+      'Open a Dispute',
+      'This will notify Tradease and pause payment release. You can describe the issue by email.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Open Dispute', style: 'destructive',
+          onPress: async () => {
+            setDisputing(true);
+            const { error } = await supabase.functions.invoke('work-order-dispute', {
+              body: { work_order_id: wo.id, reason: 'Contractor opened dispute' },
+            });
+            setDisputing(false);
+            if (error) { Alert.alert('Error', 'Could not open dispute. Please email support@tradease.app'); return; }
+            Alert.alert('Dispute Opened', 'Our team will review within 24 hours.');
+          },
+        },
+      ]
+    );
+  }
+
+  function reportIssue() {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: ['Report a Safety Issue', 'Report a Quality Issue', 'Other', 'Cancel'], cancelButtonIndex: 3 },
+        (i) => { if (i < 3) Linking.openURL(`mailto:support@tradease.app?subject=Issue%20Report%20%E2%80%94%20${wo.work_order_number}`); }
+      );
+    } else {
+      Linking.openURL(`mailto:support@tradease.app?subject=Issue%20Report%20%E2%80%94%20${wo.work_order_number}`);
+    }
+  }
+
+  return (
+    <SectionCard title="Help & Support" icon="🛟" collapsed={collapsed} onToggle={onToggle}>
+      <TouchableOpacity style={s.supportRow} onPress={reportIssue}>
+        <Ionicons name="flag-outline" size={18} color={G.amber} />
+        <View style={{ flex: 1 }}>
+          <Text style={[s.supportLabel, { color: G.amber }]}>Report an Issue</Text>
+          <Text style={s.supportSub}>Safety, quality concerns, or anything else</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={G.txt3} />
+      </TouchableOpacity>
+
+      <View style={s.divider} />
+
+      <TouchableOpacity
+        style={[s.supportRow, !canDispute && { opacity: 0.4 }]}
+        onPress={canDispute ? openDispute : undefined}
+        disabled={!canDispute || disputing}
+      >
+        {disputing
+          ? <ActivityIndicator size="small" color={G.red} />
+          : <Ionicons name="alert-circle-outline" size={18} color={G.red} />
+        }
+        <View style={{ flex: 1 }}>
+          <Text style={[s.supportLabel, { color: G.red }]}>Open a Dispute</Text>
+          <Text style={s.supportSub}>
+            {canDispute ? 'Pause payment and escalate to Tradease' : 'Available after the job is marked complete'}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={G.txt3} />
+      </TouchableOpacity>
+
+      <View style={[s.divider, { marginVertical: 4 }]} />
+
+      <TouchableOpacity style={s.supportRow} onPress={() => Linking.openURL('mailto:support@tradease.app')}>
+        <Ionicons name="mail-outline" size={18} color={G.txt2} />
+        <View style={{ flex: 1 }}>
+          <Text style={s.supportLabel}>Contact Tradease Support</Text>
+          <Text style={s.supportSub}>support@tradease.app</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={G.txt3} />
+      </TouchableOpacity>
+    </SectionCard>
+  );
+}
+
 // ─── Change Order Modal ───────────────────────────────────────────────────────
 
 function ChangeOrderModal({
@@ -1088,7 +1172,7 @@ export default function ContractorWorkOrderScreen() {
   const [transitioning, setTransitioning] = useState(false);
   const [showCO,       setShowCO]       = useState(false);
   const [collapsed, setCollapsed] = useState<Set<SectionKey>>(
-    new Set(['timeline', 'payment', 'map'] as SectionKey[])
+    new Set(['timeline', 'payment', 'map', 'support'] as SectionKey[])
   );
 
   // ── Location / map ────────────────────────────────────────────────────────
@@ -1652,6 +1736,14 @@ export default function ContractorWorkOrderScreen() {
             onToggle={() => toggleSection('payment')}
           />
         );
+      case 'support':
+        return (
+          <SupportSection
+            wo={wo!}
+            collapsed={collapsed.has('support')}
+            onToggle={() => toggleSection('support')}
+          />
+        );
       default:
         return null;
     }
@@ -1919,6 +2011,9 @@ const s = StyleSheet.create({
   center:       { flex: 1, alignItems: 'center', justifyContent: 'center' },
   txt2:         { color: G.txt2, fontSize: 14 },
   divider:      { height: StyleSheet.hairlineWidth, backgroundColor: G.border },
+  supportRow:   { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
+  supportLabel: { fontSize: 14, fontWeight: '700', color: G.txt },
+  supportSub:   { fontSize: 12, color: G.txt2, marginTop: 1 },
 
   // Header
   header:       { backgroundColor: G.bg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: G.border, paddingHorizontal: 16, paddingBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 10 },
