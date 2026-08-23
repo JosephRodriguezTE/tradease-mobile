@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Sentry from '@sentry/react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -492,23 +493,57 @@ export default function CreateJobScreen() {
       // Upload photos if any were selected
       let photoUrls: string[] = [];
       if (selectedImages.length > 0) {
-        setUploadingPhotos(true);
         const bookingRef = draftId ?? `new_${Date.now()}`;
-        for (const uri of selectedImages) {
-          try {
-            const ext  = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
-            const path = `${bookingRef}/${Date.now()}.${ext}`;
-            const res  = await fetch(uri);
-            const blob = await res.blob();
-            const { error: uploadErr } = await supabase.storage
-              .from('job-photos')
-              .upload(path, blob, { contentType: `image/${ext}`, upsert: true });
-            if (!uploadErr) {
+
+        const uploadPhotos = async (): Promise<{ urls: string[]; failedCount: number }> => {
+          const urls: string[] = [];
+          let failedCount = 0;
+          for (const uri of selectedImages) {
+            try {
+              const ext  = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
+              const path = `${bookingRef}/${Date.now()}.${ext}`;
+              const res  = await fetch(uri);
+              const blob = await res.blob();
+              const { error: uploadErr } = await supabase.storage
+                .from('job-photos')
+                .upload(path, blob, { contentType: `image/${ext}`, upsert: true });
+              if (uploadErr) throw uploadErr;
               const { data: urlData } = supabase.storage.from('job-photos').getPublicUrl(path);
-              if (urlData?.publicUrl) photoUrls.push(urlData.publicUrl);
+              if (urlData?.publicUrl) urls.push(urlData.publicUrl);
+            } catch (uploadErr: any) {
+              failedCount++;
+              Sentry.captureException(
+                uploadErr instanceof Error ? uploadErr : new Error(uploadErr?.message ?? 'Job photo upload failed'),
+                { tags: { feature: 'create-job-photo-upload' } }
+              );
             }
-          } catch {}
+          }
+          return { urls, failedCount };
+        };
+
+        setUploadingPhotos(true);
+        let { urls, failedCount } = await uploadPhotos();
+
+        while (failedCount > 0) {
+          const choice = await new Promise<'retry' | 'continue'>(resolve =>
+            Alert.alert(
+              "Some Photos Didn't Upload",
+              `${failedCount} of ${selectedImages.length} photo${selectedImages.length > 1 ? 's' : ''} failed to upload. Retry, or post the job without photos.`,
+              [
+                { text: 'Continue Without Photos', style: 'destructive', onPress: () => resolve('continue') },
+                { text: 'Retry', onPress: () => resolve('retry') },
+              ]
+            )
+          );
+          if (choice === 'continue') {
+            urls = [];
+            failedCount = 0;
+          } else {
+            ({ urls, failedCount } = await uploadPhotos());
+          }
         }
+
+        photoUrls = urls;
         setUploadingPhotos(false);
       }
 
