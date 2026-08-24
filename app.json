@@ -87,7 +87,13 @@
       ],
       "expo-font",
       "@rnmapbox/maps",
-      "@sentry/react-native"
+      [
+        "@sentry/react-native",
+        {
+          "organization": "tradease-uo",
+          "project": "react-native"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
