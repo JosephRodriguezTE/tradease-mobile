@@ -4,7 +4,6 @@
     "slug": "tradease",
     "version": "1.0.0",
     "orientation": "portrait",
-    "newArchEnabled": false,
     "icon": "./assets/tradease-icon.png",
     "scheme": "tradease",
     "userInterfaceStyle": "automatic",
