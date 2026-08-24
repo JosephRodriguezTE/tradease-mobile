@@ -370,6 +370,14 @@ export default function JobDetailScreen() {
 
   async function acceptInstantBook() {
     if (!booking || !user) return;
+    const { data: myContractor } = await supabase.from('contractors').select('verification_status').eq('id', user.id).single();
+    if (myContractor?.verification_status !== 'approved') {
+      Alert.alert('Verification Required', 'Complete verification before accepting jobs.', [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Get Verified', onPress: () => router.push('/profile/get-verified' as any) },
+      ]);
+      return;
+    }
     setOfferSaving(true);
     const { data: claimed, error } = await supabase.from('bookings').update({
       contractor_id: user.id,

@@ -1,4 +1,5 @@
 // app/profile/get-verified.tsx
+import * as Sentry from '@sentry/react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator, Alert, Image, KeyboardAvoidingView,
@@ -277,15 +278,21 @@ export default function GetVerifiedScreen() {
   async function uploadFile(uri: string, mime: string, storagePath: string): Promise<string | null> {
     try {
       const response = await fetch(uri);
-      const blob = await response.blob();
+      // .arrayBuffer(), not .blob() — RN's fetch polyfill is unreliable
+      // converting local file:// URIs to Blob on Android.
+      const buffer = await response.arrayBuffer();
       const ext = mime === 'application/pdf' ? 'pdf' : (mime.split('/')[1] || 'jpg');
       const fullPath = `${storagePath}.${ext}`;
       const { error } = await supabase.storage
         .from('verification-docs')
-        .upload(fullPath, blob, { contentType: mime, upsert: true });
+        .upload(fullPath, buffer, { contentType: mime, upsert: true });
       if (error) throw error;
       return fullPath;
     } catch (e: any) {
+      Sentry.captureException(
+        e instanceof Error ? e : new Error(e?.message ?? 'Verification document upload failed'),
+        { tags: { feature: 'get-verified-upload' }, extra: { storagePath, mime } }
+      );
       return null;
     }
   }
@@ -340,6 +347,19 @@ export default function GetVerifiedScreen() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // ── Skip ──────────────────────────────────────────────────────────────────────
+
+  function handleSkip() {
+    Alert.alert(
+      'Skip Verification?',
+      "You can finish this later from your profile, but you won't be able to accept jobs until your account is verified.",
+      [
+        { text: 'Continue Verifying', style: 'cancel' },
+        { text: 'Skip for Now', style: 'destructive', onPress: () => router.replace('/(tabs)') },
+      ]
+    );
   }
 
   // ── Success screen ────────────────────────────────────────────────────────────
@@ -514,6 +534,10 @@ export default function GetVerifiedScreen() {
             {step + 1} / {TOTAL_STEPS}
           </Text>
         </View>
+
+        <TouchableOpacity onPress={handleSkip} style={{ alignSelf: 'flex-end', paddingHorizontal: SP[5], paddingTop: SP[3] }}>
+          <Text style={{ fontSize: TY.sm, color: C.textMuted, fontWeight: Font.semibold }}>Skip for now</Text>
+        </TouchableOpacity>
 
         <ScrollView
           style={{ flex: 1 }}

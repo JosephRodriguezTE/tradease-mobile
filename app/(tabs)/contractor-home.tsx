@@ -854,6 +854,13 @@ export default function ContractorHomeScreen() {
   // ── Respond to counter ────────────────────────────────────────────────────────
   async function respondToCounter(offerId: string, bookingId: string, counterPrice: number, accept: boolean, scheduledAt?: string | null) {
     if (accept) {
+      if (contractor?.verification_status !== 'approved') {
+        Alert.alert('Verification Required', 'Complete verification before accepting jobs.', [
+          { text: 'Later', style: 'cancel' },
+          { text: 'Get Verified', onPress: () => router.push('/profile/get-verified' as any) },
+        ]);
+        return;
+      }
       const { error } = await supabase
         .from('job_offers')
         .update({ status: 'accepted', contractor_final: 'accepted', final_price: counterPrice })
@@ -953,6 +960,13 @@ export default function ContractorHomeScreen() {
 
   async function handleAcceptInstantBook(job: Job) {
     if (!contractor) return;
+    if (contractor.verification_status !== 'approved') {
+      Alert.alert('Verification Required', 'Complete verification before accepting jobs.', [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Get Verified', onPress: () => router.push('/profile/get-verified' as any) },
+      ]);
+      return;
+    }
     const { data: claimed, error } = await supabase.from('bookings').update({
       contractor_id: contractor.id,
       status: 'confirmed',
