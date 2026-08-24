@@ -1,16 +1,18 @@
 // app/(tabs)/map.tsx
-// GPS-powered proximity search. Customers find nearby contractors;
-// contractors see open jobs near them. Real map tiles added once
-// Mapbox token is configured — this list view is the functional MVP.
+// GPS-powered proximity search. Customers (and guests) see nearby contractors
+// on a real Mapbox map; contractors see open jobs near them. List view stays
+// available as a toggle for the detail-rich cards (ratings, specialties, etc).
 
 import { useTheme, AppColors } from '@/context/ThemeContext';
 import { useRole } from '@/hooks/useRole';
 import { supabase } from '@/lib/supabase';
 import { getCurrentPosition, reverseGeocode, Coords } from '@/lib/locationService';
+import { MAPBOX_ACCESS_TOKEN, DEFAULT_MAP_REGION } from '@/lib/mapConfig';
 import { ALL_TRADES, TRADE_ICONS } from '@/lib/tradeJobs';
 import { Ionicons } from '@expo/vector-icons';
+import MapboxGL from '@rnmapbox/maps';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -22,6 +24,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+MapboxGL.setAccessToken(MAPBOX_ACCESS_TOKEN);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,6 +41,8 @@ interface NearbyContractor {
   verification_status: string;
   distance_miles: number;
   specializations: string[] | null;
+  lat: number;
+  lng: number;
 }
 
 interface NearbyJob {
@@ -47,6 +53,8 @@ interface NearbyJob {
   created_at: string;
   customer: { full_name: string | null; location: string | null } | null;
   price_estimate: number | null;
+  job_lat: number | null;
+  job_lng: number | null;
 }
 
 const RADII = [10, 25, 50] as const;
@@ -138,6 +146,43 @@ function makeStyles(C: AppColors) {
     jobMeta:      { fontSize: 12, color: C.textMuted, marginTop: 6 },
     jobPrice:     { fontSize: 14, fontWeight: '800', color: '#22C55E', marginTop: 4 },
 
+    // Map pins
+    myPin: {
+      width: 16, height: 16, borderRadius: 8,
+      backgroundColor: '#3B82F6', borderWidth: 3, borderColor: '#fff',
+    },
+    jobPin: {
+      width: 30, height: 30, borderRadius: 15,
+      backgroundColor: C.orange, borderWidth: 2, borderColor: '#fff',
+      alignItems: 'center', justifyContent: 'center',
+    },
+    contractorPin: {
+      width: 30, height: 30, borderRadius: 15,
+      borderWidth: 2, borderColor: '#fff',
+      alignItems: 'center', justifyContent: 'center',
+    },
+
+    // Map/list toggle
+    listToggle: {
+      position: 'absolute', bottom: 24, alignSelf: 'center',
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      backgroundColor: 'rgba(20,20,20,0.92)', borderRadius: 999,
+      paddingHorizontal: 18, paddingVertical: 12,
+      borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+      shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6,
+    },
+    listToggleText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+    listModeHeader: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4,
+    },
+    mapToggle: {
+      flexDirection: 'row', alignItems: 'center', gap: 4,
+      paddingHorizontal: 10, paddingVertical: 5,
+      borderRadius: 999, borderWidth: 1, borderColor: C.orange,
+    },
+    mapToggleText: { fontSize: 12, fontWeight: '700', color: C.orange },
+
     // Empty / error states
     center:      { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, paddingHorizontal: 40 },
     emptyIcon:   { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
@@ -149,7 +194,7 @@ function makeStyles(C: AppColors) {
     },
     emptyBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
 
-    count: { fontSize: 13, color: C.textSecondary, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
+    count: { fontSize: 13, color: C.textSecondary },
   });
 }
 
@@ -289,6 +334,7 @@ export default function MapScreen() {
   const [jobs,          setJobs]          = useState<NearbyJob[]>([]);
   const [loading,       setLoading]       = useState(false);
   const [refreshing,    setRefreshing]    = useState(false);
+  const [viewMode,      setViewMode]      = useState<'map' | 'list'>('map');
 
   const trades = [TRADE_ALL, ...ALL_TRADES.map((trade: string) => ({ trade, emoji: TRADE_ICONS[trade] ?? '🔧' }))];
 
@@ -331,7 +377,7 @@ export default function MapScreen() {
       // Contractor: open jobs (pending, not yet assigned, request/post window not expired)
       const { data } = await supabase
         .from('bookings')
-        .select('id, trade, description, status, created_at, price_estimate, request_expires_at, customer:customer_id(full_name, location)')
+        .select('id, trade, description, status, created_at, price_estimate, request_expires_at, job_lat, job_lng, customer:customer_id(full_name, location)')
         .eq('status', 'pending')
         .is('contractor_id', null)
         .or(`request_expires_at.gt.${new Date().toISOString()},request_expires_at.is.null`)
@@ -381,6 +427,24 @@ export default function MapScreen() {
 
   const results = isContractor ? jobs : contractors;
   const isEmpty = !loading && results.length === 0;
+  const jobPins = isContractor ? jobs.filter(j => j.job_lat != null && j.job_lng != null) : [];
+
+  const cameraBounds = useMemo(() => {
+    if (!coords) return null;
+    const points: [number, number][] = [[coords.lng, coords.lat]];
+    if (isContractor) {
+      jobPins.forEach(j => points.push([j.job_lng!, j.job_lat!]));
+    } else {
+      contractors.forEach(c => points.push([c.lng, c.lat]));
+    }
+    if (points.length === 1) return null; // just the user — use a fixed zoom instead of a zero-size box
+    const lngs = points.map(p => p[0]);
+    const lats = points.map(p => p[1]);
+    return {
+      ne: [Math.max(...lngs) + 0.015, Math.max(...lats) + 0.015] as [number, number],
+      sw: [Math.min(...lngs) - 0.015, Math.min(...lats) - 0.015] as [number, number],
+    };
+  }, [coords, contractors, jobPins, isContractor]);
 
   return (
     <SafeAreaView style={s.container} edges={['top']}>
@@ -468,12 +532,76 @@ export default function MapScreen() {
             </TouchableOpacity>
           )}
         </View>
+      ) : viewMode === 'map' ? (
+        <View style={{ flex: 1 }}>
+          <MapboxGL.MapView style={{ flex: 1 }} styleURL={MapboxGL.StyleURL.Dark}>
+            {cameraBounds ? (
+              <MapboxGL.Camera
+                bounds={cameraBounds}
+                padding={{ paddingLeft: 40, paddingRight: 40, paddingTop: 60, paddingBottom: 60 }}
+                animationMode="none"
+              />
+            ) : (
+              <MapboxGL.Camera
+                centerCoordinate={coords ? [coords.lng, coords.lat] : DEFAULT_MAP_REGION.centerCoordinate}
+                zoomLevel={coords ? 12 : DEFAULT_MAP_REGION.zoomLevel}
+                animationMode="none"
+              />
+            )}
+
+            {coords && (
+              <MapboxGL.PointAnnotation id="myPin" coordinate={[coords.lng, coords.lat]}>
+                <View style={s.myPin} />
+              </MapboxGL.PointAnnotation>
+            )}
+
+            {isContractor
+              ? jobPins.map(j => (
+                  <MapboxGL.PointAnnotation
+                    key={j.id}
+                    id={`job-${j.id}`}
+                    coordinate={[j.job_lng!, j.job_lat!]}
+                    onSelected={() => router.push(`/job/${j.id}` as any)}
+                  >
+                    <View style={s.jobPin}>
+                      <Ionicons name="briefcase" size={14} color="#fff" />
+                    </View>
+                  </MapboxGL.PointAnnotation>
+                ))
+              : contractors.map(c => (
+                  <MapboxGL.PointAnnotation
+                    key={c.id}
+                    id={`contractor-${c.id}`}
+                    coordinate={[c.lng, c.lat]}
+                    onSelected={() => router.push(`/company/${c.id}` as any)}
+                  >
+                    <View style={[s.contractorPin, { backgroundColor: c.is_available ? '#22C55E' : '#6B7280' }]}>
+                      <Ionicons name="person" size={14} color="#fff" />
+                    </View>
+                  </MapboxGL.PointAnnotation>
+                ))
+            }
+          </MapboxGL.MapView>
+
+          <TouchableOpacity style={s.listToggle} onPress={() => setViewMode('list')} activeOpacity={0.85}>
+            <Ionicons name="list" size={16} color="#fff" />
+            <Text style={s.listToggleText}>
+              {results.length} {isContractor ? 'job' : 'contractor'}{results.length !== 1 ? 's' : ''}
+            </Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <>
-          <Text style={s.count}>
-            {results.length} {isContractor ? 'job' : 'contractor'}{results.length !== 1 ? 's' : ''}{' '}
-            {!isContractor ? `within ${radius} miles` : 'available'}
-          </Text>
+          <View style={s.listModeHeader}>
+            <Text style={s.count}>
+              {results.length} {isContractor ? 'job' : 'contractor'}{results.length !== 1 ? 's' : ''}{' '}
+              {!isContractor ? `within ${radius} miles` : 'available'}
+            </Text>
+            <TouchableOpacity style={s.mapToggle} onPress={() => setViewMode('map')} activeOpacity={0.85}>
+              <Ionicons name="map-outline" size={14} color={C.orange} />
+              <Text style={s.mapToggleText}>Map</Text>
+            </TouchableOpacity>
+          </View>
           <FlatList
             data={results as any[]}
             keyExtractor={item => item.id}
