@@ -393,6 +393,30 @@ export default function MapScreen() {
     if (coords) fetchResults();
   }, [fetchResults, coords]);
 
+  // ── Derived data — must run unconditionally, before any early return,
+  // or the hook count changes between renders once `locating`/`locErr` flip. ──
+
+  const results = isContractor ? jobs : contractors;
+  const isEmpty = !loading && results.length === 0;
+  const jobPins = isContractor ? jobs.filter(j => j.job_lat != null && j.job_lng != null) : [];
+
+  const cameraBounds = useMemo(() => {
+    if (!coords) return null;
+    const points: [number, number][] = [[coords.lng, coords.lat]];
+    if (isContractor) {
+      jobPins.forEach(j => points.push([j.job_lng!, j.job_lat!]));
+    } else {
+      contractors.forEach(c => points.push([c.lng, c.lat]));
+    }
+    if (points.length === 1) return null; // just the user — use a fixed zoom instead of a zero-size box
+    const lngs = points.map(p => p[0]);
+    const lats = points.map(p => p[1]);
+    return {
+      ne: [Math.max(...lngs) + 0.015, Math.max(...lats) + 0.015] as [number, number],
+      sw: [Math.min(...lngs) - 0.015, Math.min(...lats) - 0.015] as [number, number],
+    };
+  }, [coords, contractors, jobPins, isContractor]);
+
   // ── States ────────────────────────────────────────────────────────────────
 
   if (locating) {
@@ -424,27 +448,6 @@ export default function MapScreen() {
       </SafeAreaView>
     );
   }
-
-  const results = isContractor ? jobs : contractors;
-  const isEmpty = !loading && results.length === 0;
-  const jobPins = isContractor ? jobs.filter(j => j.job_lat != null && j.job_lng != null) : [];
-
-  const cameraBounds = useMemo(() => {
-    if (!coords) return null;
-    const points: [number, number][] = [[coords.lng, coords.lat]];
-    if (isContractor) {
-      jobPins.forEach(j => points.push([j.job_lng!, j.job_lat!]));
-    } else {
-      contractors.forEach(c => points.push([c.lng, c.lat]));
-    }
-    if (points.length === 1) return null; // just the user — use a fixed zoom instead of a zero-size box
-    const lngs = points.map(p => p[0]);
-    const lats = points.map(p => p[1]);
-    return {
-      ne: [Math.max(...lngs) + 0.015, Math.max(...lats) + 0.015] as [number, number],
-      sw: [Math.min(...lngs) - 0.015, Math.min(...lats) - 0.015] as [number, number],
-    };
-  }, [coords, contractors, jobPins, isContractor]);
 
   return (
     <SafeAreaView style={s.container} edges={['top']}>

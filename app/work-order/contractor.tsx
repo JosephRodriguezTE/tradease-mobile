@@ -1539,6 +1539,11 @@ export default function ContractorWorkOrderScreen() {
     });
   }, []);
 
+  // Not a real hook internally (no React hook calls), but named like one —
+  // kept above the early returns anyway so it can never become a real
+  // hooks-order bug if usePrimaryAction is ever refactored later.
+  const action = usePrimaryAction(wo, now);
+
   // ─────────────────────────────────────────────────────────────────────────
   // Render
   // ─────────────────────────────────────────────────────────────────────────
@@ -1576,7 +1581,6 @@ export default function ContractorWorkOrderScreen() {
     );
   }
 
-  const action    = usePrimaryAction(wo, now);
   const basePrice = wo.booking?.price_estimate ?? 0;
   const trade     = wo.booking?.trade ?? wo.service_type ?? '';
   const isActive  = wo.wo_status === 'in_progress';
