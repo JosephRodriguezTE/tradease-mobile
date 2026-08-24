@@ -35,6 +35,7 @@
     },
     "android": {
       "package": "com.tradease.app",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/tradease-icon.png",
         "backgroundColor": "#0A0A0A"
