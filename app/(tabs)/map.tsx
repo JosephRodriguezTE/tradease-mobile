@@ -534,7 +534,12 @@ export default function MapScreen() {
         </View>
       ) : viewMode === 'map' ? (
         <View style={{ flex: 1 }}>
-          <MapboxGL.MapView style={{ flex: 1 }} styleURL={MapboxGL.StyleURL.Dark}>
+          <MapboxGL.MapView
+            style={{ flex: 1 }}
+            styleURL={MapboxGL.StyleURL.Dark}
+            pitchEnabled={false}
+            rotateEnabled={false}
+          >
             {cameraBounds ? (
               <MapboxGL.Camera
                 bounds={cameraBounds}
@@ -557,28 +562,22 @@ export default function MapScreen() {
 
             {isContractor
               ? jobPins.map(j => (
-                  <MapboxGL.PointAnnotation
-                    key={j.id}
-                    id={`job-${j.id}`}
-                    coordinate={[j.job_lng!, j.job_lat!]}
-                    onSelected={() => router.push(`/job/${j.id}` as any)}
-                  >
-                    <View style={s.jobPin}>
-                      <Ionicons name="briefcase" size={14} color="#fff" />
-                    </View>
-                  </MapboxGL.PointAnnotation>
+                  <MapboxGL.MarkerView key={j.id} id={`job-${j.id}`} coordinate={[j.job_lng!, j.job_lat!]}>
+                    <TouchableOpacity onPress={() => router.push(`/job/${j.id}` as any)} activeOpacity={0.8}>
+                      <View style={s.jobPin}>
+                        <Ionicons name="briefcase" size={14} color="#fff" />
+                      </View>
+                    </TouchableOpacity>
+                  </MapboxGL.MarkerView>
                 ))
               : contractors.map(c => (
-                  <MapboxGL.PointAnnotation
-                    key={c.id}
-                    id={`contractor-${c.id}`}
-                    coordinate={[c.lng, c.lat]}
-                    onSelected={() => router.push(`/company/${c.id}` as any)}
-                  >
-                    <View style={[s.contractorPin, { backgroundColor: c.is_available ? '#22C55E' : '#6B7280' }]}>
-                      <Ionicons name="person" size={14} color="#fff" />
-                    </View>
-                  </MapboxGL.PointAnnotation>
+                  <MapboxGL.MarkerView key={c.id} id={`contractor-${c.id}`} coordinate={[c.lng, c.lat]}>
+                    <TouchableOpacity onPress={() => router.push(`/company/${c.id}` as any)} activeOpacity={0.8}>
+                      <View style={[s.contractorPin, { backgroundColor: c.is_available ? '#22C55E' : '#6B7280' }]}>
+                        <Ionicons name="person" size={14} color="#fff" />
+                      </View>
+                    </TouchableOpacity>
+                  </MapboxGL.MarkerView>
                 ))
             }
           </MapboxGL.MapView>
