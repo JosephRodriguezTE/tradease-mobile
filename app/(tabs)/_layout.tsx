@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { CalendarCheck, MapPinned, MessageCircle, Settings as SettingsIcon, User } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '../../hooks/useAuth';
@@ -34,6 +35,7 @@ function TabIcon({ Icon, focused }: { Icon: any; focused: boolean }) {
 
 export default function TabsLayout() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { colors: Colors } = useTheme();
   const { isContractor, loading: roleLoading } = useRole();
   const { user } = useAuth();
@@ -88,8 +90,8 @@ export default function TabsLayout() {
           backgroundColor: Colors.surface,
           borderTopColor: Colors.border,
           borderTopWidth: 1.5,
-          height: 84,
-          paddingBottom: 18,
+          height: 66 + insets.bottom,
+          paddingBottom: 12 + insets.bottom,
           paddingTop: 12,
           shadowColor: Colors.orange,
           shadowOffset: { width: 0, height: -4 },

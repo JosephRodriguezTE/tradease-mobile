@@ -36,6 +36,7 @@
     "android": {
       "package": "com.tradease.app",
       "googleServicesFile": "./google-services.json",
+      "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/tradease-icon.png",
         "backgroundColor": "#0A0A0A"
