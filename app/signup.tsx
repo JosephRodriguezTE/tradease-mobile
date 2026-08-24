@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -113,7 +114,7 @@ function ToggleRow({ icon, label, sub, value, onValueChange }: any) {
   return (
     <View style={toggleStyles.row}>
       <View style={toggleStyles.iconBox}>
-        <Text style={toggleStyles.icon}>{icon}</Text>
+        <Ionicons name={icon} size={18} color={Colors.orange} />
       </View>
       <View style={toggleStyles.info}>
         <Text style={toggleStyles.label}>{label}</Text>
@@ -246,7 +247,7 @@ export default function SignupScreen() {
 
   // ─── HANDLERS ─────────────────────────────────────────
 
-  const handleSignup = async (requestVerification = false) => {
+  const handleSignup = async () => {
     if (!legalName.trim()) return Alert.alert('Required', 'Please enter your legal name.');
     if (!email.trim()) return Alert.alert('Required', 'Please enter your email.');
     if (!/\S+@\S+\.\S+/.test(email)) return Alert.alert('Invalid', 'Please enter a valid email.');
@@ -330,8 +331,7 @@ export default function SignupScreen() {
           is_available: false,
           onboarding_complete: false,
           plan: 'free',
-          verification_status: requestVerification ? 'pending_review' : 'unverified',
-          ...(requestVerification ? { verification_submitted_at: new Date().toISOString() } : {}),
+          verification_status: 'unverified',
         });
         if (insErr) console.log('contractors insert error:', insErr);
       }
@@ -344,7 +344,8 @@ export default function SignupScreen() {
       if (role === 'customer') {
         router.replace('/onboarding/customer');
       } else {
-        router.replace('/(tabs)');
+        // Straight into the real, complete verification flow — no dead-end shortcut.
+        router.replace('/profile/get-verified');
       }
     } catch (err: any) {
       Alert.alert('Sign Up Failed', err.message ?? 'Something went wrong.');
@@ -365,6 +366,20 @@ export default function SignupScreen() {
     tradeCategory.length > 0 &&
     agreed;
 
+  // Mirrors canCreateContractor's conditions one-to-one, so the disabled button
+  // can tell the user exactly what's missing instead of just staying grey.
+  const missingContractorFields: string[] = [];
+  if (isContractor) {
+    if (!(legalName.trim().length > 1)) missingContractorFields.push('legal name');
+    if (!/\S+@\S+\.\S+/.test(email.trim())) missingContractorFields.push('a valid email');
+    if (!(phone.trim().length > 6)) missingContractorFields.push('phone number');
+    if (!googleMode && password.length < 8) missingContractorFields.push('a password (8+ characters)');
+    if (!googleMode && password !== confirmPassword) missingContractorFields.push('matching passwords');
+    if (!(businessName.trim().length > 1)) missingContractorFields.push('business name');
+    if (!(tradeCategory.length > 0)) missingContractorFields.push('a trade category');
+    if (!agreed) missingContractorFields.push('agreeing to the Terms of Service');
+  }
+
   if (!bootChecked) {
     return (
       <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
@@ -381,7 +396,7 @@ export default function SignupScreen() {
       <SafeAreaView edges={['top']} style={styles.topSafe}>
         <View style={styles.topBar}>
           <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')}>
-            <Text style={styles.backArrow}>←</Text>
+            <Ionicons name="chevron-back" size={20} color={Colors.white} />
           </TouchableOpacity>
           <TradeaseLogo iconSize={30} fontSize={18} gap={-13} />
           <View style={{ width: 40 }} />
@@ -411,7 +426,9 @@ export default function SignupScreen() {
             {/* Google Connected Banner */}
             {googleMode && (
               <View style={styles.googleBanner}>
-                <Text style={styles.googleBannerIcon}>✓</Text>
+                <View style={styles.googleBannerIcon}>
+                  <Ionicons name="checkmark" size={16} color="#0A0A0A" />
+                </View>
                 <View style={styles.googleBannerInfo}>
                   <Text style={styles.googleBannerTitle}>Connected with Google</Text>
                   <Text style={styles.googleBannerSub} numberOfLines={1}>{email}</Text>
@@ -426,7 +443,7 @@ export default function SignupScreen() {
                 onPress={() => setRole('customer')}
                 activeOpacity={0.85}
               >
-                <Text style={styles.roleEmoji}>🔍</Text>
+                <Ionicons name="search-outline" size={22} color={role === 'customer' ? Colors.orange : '#888'} />
                 <View>
                   <Text style={[styles.roleLabel, role === 'customer' && styles.roleLabelActive]}>Customer</Text>
                   <Text style={styles.roleSub}>I need a contractor</Text>
@@ -437,7 +454,7 @@ export default function SignupScreen() {
                 onPress={() => setRole('contractor')}
                 activeOpacity={0.85}
               >
-                <Text style={styles.roleEmoji}>🔧</Text>
+                <Ionicons name="construct-outline" size={22} color={role === 'contractor' ? Colors.orange : '#888'} />
                 <View>
                   <Text style={[styles.roleLabel, role === 'contractor' && styles.roleLabelActive]}>Contractor</Text>
                   <Text style={styles.roleSub}>I do the work</Text>
@@ -493,7 +510,7 @@ export default function SignupScreen() {
                     autoComplete="new-password"
                     rightElement={
                       <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-                        <Text style={styles.eye}>{showPass ? '🙈' : '👁️'}</Text>
+                        <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={18} color="#888" />
                       </TouchableOpacity>
                     }
                   />
@@ -507,7 +524,7 @@ export default function SignupScreen() {
                     secureTextEntry={!showConfirm}
                     rightElement={
                       <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)}>
-                        <Text style={styles.eye}>{showConfirm ? '🙈' : '👁️'}</Text>
+                        <Ionicons name={showConfirm ? 'eye-off-outline' : 'eye-outline'} size={18} color="#888" />
                       </TouchableOpacity>
                     }
                   />
@@ -576,7 +593,7 @@ export default function SignupScreen() {
 
                 <Text style={styles.sectionLabel}>LICENSE INFO · OPTIONAL</Text>
                 <View style={styles.licenseNotice}>
-                  <Text style={styles.licenseNoticeIcon}>⚖️</Text>
+                  <Ionicons name="ribbon-outline" size={16} color="#888" />
                   <Text style={styles.licenseNoticeText}>
                     If your trade requires a license in your state/county, add it here for verification. Skip if not applicable.
                   </Text>
@@ -598,7 +615,7 @@ export default function SignupScreen() {
                       <Text style={[inputStyles.input, { paddingVertical: 0, color: expiryMonth > 0 ? Colors.white : '#3F3F3F' }]}>
                         {expiryMonth > 0 ? `${MONTHS[expiryMonth - 1]} ${expiryYear}` : 'Select expiry date'}
                       </Text>
-                      <Text style={{ fontSize: 16 }}>📅</Text>
+                      <Ionicons name="calendar-outline" size={16} color="#888" />
                     </TouchableOpacity>
                     {showExpiryPicker && (
                       <MonthYearPicker
@@ -625,7 +642,7 @@ export default function SignupScreen() {
                 <Text style={styles.sectionLabel}>LOCATION</Text>
                 <View style={styles.section}>
                   <ToggleRow
-                    icon="📍"
+                    icon="location-outline"
                     label="Share my location publicly"
                     sub="Shows your town and ZIP — never your exact address"
                     value={publicLocation}
@@ -639,7 +656,7 @@ export default function SignupScreen() {
             <Text style={styles.sectionLabel}>PERMISSIONS</Text>
             <View style={styles.section}>
               <ToggleRow
-                icon="🔔"
+                icon="notifications-outline"
                 label="Notifications"
                 sub="Get updates on bookings and messages"
                 value={allowNotifications}
@@ -647,7 +664,7 @@ export default function SignupScreen() {
               />
               <View style={styles.divider} />
               <ToggleRow
-                icon="📡"
+                icon="pulse-outline"
                 label="Motion & Activity"
                 sub="Used for live location and movement detection"
                 value={allowMotion}
@@ -655,7 +672,7 @@ export default function SignupScreen() {
               />
               <View style={styles.divider} />
               <ToggleRow
-                icon="📷"
+                icon="camera-outline"
                 label="Photos & Videos"
                 sub="Upload media to your profile and jobs"
                 value={allowMedia}
@@ -666,7 +683,7 @@ export default function SignupScreen() {
             {/* Terms */}
             <TouchableOpacity style={styles.termsRow} activeOpacity={0.8} onPress={() => setAgreed(!agreed)}>
               <View style={[styles.checkbox, agreed && styles.checkboxActive]}>
-                {agreed && <Text style={styles.checkmark}>✓</Text>}
+                {agreed && <Ionicons name="checkmark" size={12} color="#0A0A0A" />}
               </View>
               <Text style={styles.termsText}>
                 I agree to the <Text style={styles.termsLink}>Terms of Service</Text>{' '}
@@ -677,11 +694,10 @@ export default function SignupScreen() {
             {/* Submit */}
             {isContractor ? (
               <View style={{ gap: 10 }}>
-                {/* Button 1 — Create Account (basic required fields) */}
                 <TouchableOpacity
                   style={styles.submitBtn}
                   activeOpacity={canCreateContractor ? 0.9 : 1}
-                  onPress={canCreateContractor ? () => handleSignup(false) : undefined}
+                  onPress={canCreateContractor ? () => handleSignup() : undefined}
                   disabled={loading}
                 >
                   {canCreateContractor ? (
@@ -698,49 +714,18 @@ export default function SignupScreen() {
                           <Text style={styles.submitText}>
                             {googleMode ? 'Complete Contractor Profile' : 'Create Contractor Account'}
                           </Text>
-                          <Text style={styles.submitArrow}>→</Text>
+                          <Ionicons name="arrow-forward" size={18} color="#0A0A0A" />
                         </>
                       )}
                     </LinearGradient>
                   ) : (
                     <View style={styles.verifyBtnDisabled}>
-                      <Text style={styles.verifyBtnDisabledText}>Create Contractor Account</Text>
+                      <Text style={styles.verifyBtnDisabledText}>
+                        Add: {missingContractorFields.join(', ')}
+                      </Text>
                     </View>
                   )}
                 </TouchableOpacity>
-
-                {/* Button 2 — Request Verification (needs address + service area too) */}
-                {(() => {
-                  const canVerify = canCreateContractor &&
-                    businessAddress.trim().length > 0 &&
-                    serviceArea.trim().length > 3;
-                  return (
-                    <TouchableOpacity
-                      style={[styles.submitBtn, { marginTop: 0 }]}
-                      activeOpacity={canVerify ? 0.9 : 1}
-                      onPress={canVerify ? () => handleSignup(true) : undefined}
-                      disabled={loading}
-                    >
-                      {canVerify ? (
-                        <LinearGradient
-                          colors={['#1A1A1A', '#252525']}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                          style={[styles.submitGradient, { borderWidth: 1, borderColor: '#FF6200', borderRadius: 18 }]}
-                        >
-                          <Text style={[styles.submitText, { color: '#FF6200' }]}>Request Verification</Text>
-                          <Text style={[styles.submitArrow, { color: '#FF6200' }]}>→</Text>
-                        </LinearGradient>
-                      ) : (
-                        <View style={styles.verifyBtnDisabled}>
-                          <Text style={styles.verifyBtnDisabledText}>
-                            Request Verification · Add address & service area
-                          </Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })()}
               </View>
             ) : (
               <TouchableOpacity
@@ -762,7 +747,7 @@ export default function SignupScreen() {
                       <Text style={styles.submitText}>
                         {googleMode ? 'Complete Customer Profile' : 'Create Customer Account'}
                       </Text>
-                      <Text style={styles.submitArrow}>→</Text>
+                      <Ionicons name="arrow-forward" size={18} color="#0A0A0A" />
                     </>
                   )}
                 </LinearGradient>
@@ -778,7 +763,7 @@ export default function SignupScreen() {
             )}
 
             <View style={styles.securityNote}>
-              <Text style={styles.securityIcon}>🔒</Text>
+              <Ionicons name="lock-closed-outline" size={12} color="#555" />
               <Text style={styles.securityText}>Your information is securely encrypted.</Text>
             </View>
           </Animated.View>
@@ -837,9 +822,8 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   googleBannerIcon: {
-    fontSize: 14, color: '#0A0A0A',
     backgroundColor: '#22C55E', width: 26, height: 26,
-    borderRadius: 13, textAlign: 'center', lineHeight: 26, fontFamily: FontFamily.black,
+    borderRadius: 13, alignItems: 'center', justifyContent: 'center',
   },
   googleBannerInfo: { flex: 1, gap: 2 },
   googleBannerTitle: { fontSize: 13, fontFamily: FontFamily.bold, color: '#22C55E' },
@@ -855,9 +839,7 @@ const styles = StyleSheet.create({
   roleOptionActive: {
     borderColor: Colors.orange,
     backgroundColor: 'rgba(255,98,0,0.06)',
-    ...Shadows.glow, shadowOpacity: 0.25, shadowRadius: 12,
   },
-  roleEmoji: { fontSize: 22 },
   roleLabel: { fontSize: 13, fontFamily: FontFamily.bold, color: '#888', marginBottom: 2 },
   roleLabelActive: { color: Colors.white },
   roleSub: { fontSize: 10, fontFamily: FontFamily.medium, color: '#555' },
@@ -929,10 +911,11 @@ const styles = StyleSheet.create({
   securityText: { fontSize: 11, fontFamily: FontFamily.medium, color: '#666' },
 
   verifyBtnDisabled: {
-    height: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     backgroundColor: '#141414', borderWidth: 1, borderColor: '#2A2A2A', borderRadius: 18,
+    paddingHorizontal: 16, paddingVertical: 12,
   },
-  verifyBtnDisabledText: { fontSize: 15, fontFamily: FontFamily.bold, color: '#444', letterSpacing: 0.2 },
+  verifyBtnDisabledText: { fontSize: 14, fontFamily: FontFamily.bold, color: '#444', letterSpacing: 0.2, textAlign: 'center' },
   verifyUnlockNote: { fontSize: 11, fontFamily: FontFamily.medium, color: '#555', textAlign: 'center', lineHeight: 16 },
 });
 
