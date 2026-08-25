@@ -83,6 +83,7 @@ export default function CreateJobScreen() {
   const [showAuthSheet, setShowAuthSheet] = useState(false);
   const [isInstantBook,    setIsInstantBook]    = useState(false);
   const [instantBookPrice, setInstantBookPrice] = useState('');
+  const [isPublic,          setIsPublic]         = useState(false);
 
   const [matchedContractors,  setMatchedContractors]  = useState<any[]>([]);
   const [sortByNearest,       setSortByNearest]       = useState(false);
@@ -118,6 +119,7 @@ export default function CreateJobScreen() {
       // Match specific job from trade jobs list
       const tradeJobs = draft.trade ? (TRADE_JOBS[draft.trade] ?? []) : [];
       setSelectedJob(tradeJobs.find((j: any) => (draft.description ?? '').startsWith(j.label + ':')) ?? null);
+      setIsPublic(!!draft.is_public);
       // Jump to review if complete, otherwise to the furthest filled step
       if (draft.trade && draft.price_estimate && draft.notes) setStep(3);
       else if (draft.trade) setStep(1);
@@ -146,6 +148,7 @@ export default function CreateJobScreen() {
       const tradeJobs = source.trade ? (TRADE_JOBS[source.trade] ?? []) : [];
       setSelectedJob(tradeJobs.find((j: any) => (source.description ?? '').startsWith(j.label + ':')) ?? null);
       setIsInstantBook(!!source.is_instant_book);
+      setIsPublic(!!source.is_public);
       if (source.instant_book_price) setInstantBookPrice(String(source.instant_book_price));
       if (source.trade && source.price_estimate && source.notes) setStep(3);
       else if (source.trade) setStep(1);
@@ -375,6 +378,7 @@ export default function CreateJobScreen() {
       price_estimate: selectedPrice?.max ?? null,
       booking_time:   selectedTime?.label ?? '',
       status:         'draft',
+      is_public:      isPublic,
       payment_status: 'unpaid',
       refund_status:  'none',
     };
@@ -490,6 +494,22 @@ export default function CreateJobScreen() {
         } catch {}
       }
 
+      // Reverse-geocode the true coords for a coarse, public-safe area
+      // label. Location.geocodeAsync() above only returns coordinates, not
+      // place names, so this is a second on-device expo-location call —
+      // same library already used in detectLocation() below, not a new
+      // geocoding service. Only town is used; the reverse-geocoded street
+      // is the customer's own street, which is too identifying to surface
+      // as "nearest major road" without a real roads dataset, so that
+      // column is left null from the client for now.
+      let town: string | null = null;
+      if (coords) {
+        try {
+          const [addr] = await Location.reverseGeocodeAsync({ latitude: coords.lat, longitude: coords.lng });
+          town = addr?.city ?? null;
+        } catch {}
+      }
+
       // Upload photos if any were selected
       let photoUrls: string[] = [];
       if (selectedImages.length > 0) {
@@ -562,6 +582,9 @@ export default function CreateJobScreen() {
         notes:               address,
         job_lat:             coords?.lat ?? null,
         job_lng:             coords?.lng ?? null,
+        is_public:           isPublic,
+        town,
+        nearest_major_road:  null,
         price_estimate:      isInstantBook ? (ibPrice ?? 0) : (selectedPrice?.max ?? 0),
         booking_time:        selectedDate
           ? `${selectedTime?.label} · ${selectedDate.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}`
@@ -897,6 +920,25 @@ export default function CreateJobScreen() {
                     : 'No verified contractors found in this area yet'}
                 </Text>
               )}
+
+              {/* Public map toggle */}
+              <Text style={styles.sectionLabel}>MAP VISIBILITY</Text>
+              <View style={styles.instantBookRow}>
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={{ fontSize: 15, fontWeight: Font.black, color: Colors.white }}>
+                    📍 Make this job public
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#666', lineHeight: 17 }}>
+                    Public jobs show up on the map so nearby pros can find you. Your address stays hidden — the map shows a general area until you hire someone.
+                  </Text>
+                </View>
+                <Switch
+                  value={isPublic}
+                  onValueChange={setIsPublic}
+                  thumbColor={isPublic ? Colors.orange : '#555'}
+                  trackColor={{ false: '#2A2A2A', true: 'rgba(255,98,0,0.3)' }}
+                />
+              </View>
 
               {/* Preferred date for Today / This Week / Weekend */}
               {(selectedTime?.id === 'today' || selectedTime?.id === 'this_week' || selectedTime?.id === 'weekend') && (() => {

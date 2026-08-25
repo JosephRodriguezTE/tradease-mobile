@@ -48,13 +48,17 @@ interface NearbyContractor {
 interface NearbyJob {
   id: string;
   trade: string;
-  description: string;
+  urgency: string;
   status: string;
-  created_at: string;
-  customer: { full_name: string | null; location: string | null } | null;
   price_estimate: number | null;
-  job_lat: number | null;
-  job_lng: number | null;
+  created_at: string;
+  request_expires_at: string | null;
+  // Server-fuzzed via public_jobs_nearby() — never the true coordinate.
+  // See lib/map/location-privacy.ts.
+  fuzzed_lat: number | null;
+  fuzzed_lng: number | null;
+  town: string | null;
+  nearest_major_road: string | null;
 }
 
 const RADII = [10, 25, 50] as const;
@@ -305,6 +309,9 @@ function JobCard({ item, onPress, C }: {
 }) {
   const s = makeStyles(C);
   const when = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const areaLabel = item.town
+    ? (item.nearest_major_road ? `${item.town} — near ${item.nearest_major_road}` : item.town)
+    : 'Nearby';
 
   return (
     <TouchableOpacity style={s.card} onPress={onPress} activeOpacity={0.75}>
@@ -314,11 +321,11 @@ function JobCard({ item, onPress, C }: {
           <Text style={s.jobPrice}>${item.price_estimate.toLocaleString()}</Text>
         )}
       </View>
-      <Text style={s.jobDesc} numberOfLines={2}>{item.description}</Text>
+      <Text style={s.jobDesc} numberOfLines={2}>
+        Approximate location — exact address shared when you're hired.
+      </Text>
       <Text style={s.jobMeta}>
-        {item.customer?.full_name ?? 'Customer'}
-        {item.customer?.location ? ` · ${item.customer.location}` : ''}
-        {' · '}{when}
+        {areaLabel}{' · '}{when}
       </Text>
     </TouchableOpacity>
   );
@@ -385,16 +392,17 @@ export default function MapScreen() {
       });
       setContractors((data ?? []) as NearbyContractor[]);
     } else {
-      // Contractor: open jobs (pending, not yet assigned, request/post window not expired)
-      const { data } = await supabase
-        .from('bookings')
-        .select('id, trade, description, status, created_at, price_estimate, request_expires_at, job_lat, job_lng, customer:customer_id(full_name, location)')
-        .eq('status', 'pending')
-        .is('contractor_id', null)
-        .or(`request_expires_at.gt.${new Date().toISOString()},request_expires_at.is.null`)
-        .order('created_at', { ascending: false })
-        .limit(50);
-      setJobs((data ?? []) as unknown as NearbyJob[]);
+      // Contractor: public jobs only, server-fuzzed. RLS no longer grants
+      // browsing contractors direct table access to bookings — this RPC
+      // is the only read path. Filtering (pending, unclaimed, public, not
+      // expired) happens server-side. See lib/map/location-privacy.ts.
+      const { data } = await supabase.rpc('public_jobs_nearby', {
+        user_lat:     coords.lat,
+        user_lng:     coords.lng,
+        max_miles:    radius,
+        trade_filter: tradeFilter !== 'All' ? tradeFilter : null,
+      });
+      setJobs((data ?? []) as NearbyJob[]);
     }
 
     setHasFetchedOnce(true);
@@ -410,13 +418,13 @@ export default function MapScreen() {
 
   const results = isContractor ? jobs : contractors;
   const isEmpty = hasFetchedOnce && !loading && results.length === 0;
-  const jobPins = isContractor ? jobs.filter(j => j.job_lat != null && j.job_lng != null) : [];
+  const jobPins = isContractor ? jobs.filter(j => j.fuzzed_lat != null && j.fuzzed_lng != null) : [];
 
   const cameraBounds = useMemo(() => {
     if (!coords) return null;
     const points: [number, number][] = [[coords.lng, coords.lat]];
     if (isContractor) {
-      jobPins.forEach(j => points.push([j.job_lng!, j.job_lat!]));
+      jobPins.forEach(j => points.push([j.fuzzed_lng!, j.fuzzed_lat!]));
     } else {
       contractors.forEach(c => points.push([c.lng, c.lat]));
     }
@@ -568,7 +576,7 @@ export default function MapScreen() {
 
             {isContractor
               ? jobPins.map(j => (
-                  <MapboxGL.MarkerView key={j.id} id={`job-${j.id}`} coordinate={[j.job_lng!, j.job_lat!]}>
+                  <MapboxGL.MarkerView key={j.id} id={`job-${j.id}`} coordinate={[j.fuzzed_lng!, j.fuzzed_lat!]}>
                     <TouchableOpacity onPress={() => router.push(`/job/${j.id}` as any)} activeOpacity={0.8}>
                       <View style={s.jobPin}>
                         <Ionicons name="briefcase" size={14} color="#fff" />
