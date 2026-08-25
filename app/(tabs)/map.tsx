@@ -162,6 +162,16 @@ function makeStyles(C: AppColors) {
       alignItems: 'center', justifyContent: 'center',
     },
 
+    // Empty-state banner overlaid on the map (map always stays visible)
+    mapEmptyBanner: {
+      position: 'absolute', top: 12, left: 12, right: 12, zIndex: 1,
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      backgroundColor: 'rgba(20,20,20,0.92)', borderRadius: 12,
+      paddingHorizontal: 14, paddingVertical: 10,
+      borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    },
+    mapEmptyBannerText: { flex: 1, fontSize: 12.5, fontWeight: '600', color: '#fff' },
+
     // Map/list toggle
     listToggle: {
       position: 'absolute', bottom: 24, alignSelf: 'center',
@@ -335,6 +345,7 @@ export default function MapScreen() {
   const [loading,       setLoading]       = useState(false);
   const [refreshing,    setRefreshing]    = useState(false);
   const [viewMode,      setViewMode]      = useState<'map' | 'list'>('map');
+  const [hasFetchedOnce, setHasFetchedOnce] = useState(false);
 
   const trades = [TRADE_ALL, ...ALL_TRADES.map((trade: string) => ({ trade, emoji: TRADE_ICONS[trade] ?? '🔧' }))];
 
@@ -386,6 +397,7 @@ export default function MapScreen() {
       setJobs((data ?? []) as unknown as NearbyJob[]);
     }
 
+    setHasFetchedOnce(true);
     isRefresh ? setRefreshing(false) : setLoading(false);
   }, [coords, radius, tradeFilter, isContractor]);
 
@@ -397,7 +409,7 @@ export default function MapScreen() {
   // or the hook count changes between renders once `locating`/`locErr` flip. ──
 
   const results = isContractor ? jobs : contractors;
-  const isEmpty = !loading && results.length === 0;
+  const isEmpty = hasFetchedOnce && !loading && results.length === 0;
   const jobPins = isContractor ? jobs.filter(j => j.job_lat != null && j.job_lng != null) : [];
 
   const cameraBounds = useMemo(() => {
@@ -516,27 +528,18 @@ export default function MapScreen() {
       </View>
 
       {/* ── Results ── */}
-      {isEmpty ? (
-        <View style={s.center}>
-          <View style={[s.emptyIcon, { borderColor: `${C.orange}30`, backgroundColor: `${C.orange}10` }]}>
-            <Ionicons name={isContractor ? 'briefcase-outline' : 'person-outline'} size={36} color={C.orange} />
-          </View>
-          <Text style={s.emptyTitle}>
-            {isContractor ? 'No Open Jobs' : 'No Contractors Found'}
-          </Text>
-          <Text style={s.emptySub}>
-            {isContractor
-              ? 'No pending jobs right now. Check back soon or expand to a wider radius.'
-              : `No ${tradeFilter !== 'All' ? tradeFilter + ' ' : ''}contractors within ${radius} miles. Try expanding your search radius.`}
-          </Text>
-          {!isContractor && tradeFilter !== 'All' && (
-            <TouchableOpacity style={[s.emptyBtn, { backgroundColor: C.orange }]} onPress={() => setTradeFilter('All')}>
-              <Text style={s.emptyBtnText}>Clear Filter</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      ) : viewMode === 'map' ? (
+      {viewMode === 'map' ? (
         <View style={{ flex: 1 }}>
+          {isEmpty && (
+            <View style={s.mapEmptyBanner}>
+              <Ionicons name={isContractor ? 'briefcase-outline' : 'person-outline'} size={15} color={C.textSecondary} />
+              <Text style={s.mapEmptyBannerText} numberOfLines={2}>
+                {isContractor
+                  ? 'No pending jobs right now — check back soon.'
+                  : `No ${tradeFilter !== 'All' ? tradeFilter + ' ' : ''}contractors within ${radius} miles.`}
+              </Text>
+            </View>
+          )}
           <MapboxGL.MapView
             style={{ flex: 1 }}
             styleURL={MapboxGL.StyleURL.Dark}
@@ -591,6 +594,25 @@ export default function MapScreen() {
               {results.length} {isContractor ? 'job' : 'contractor'}{results.length !== 1 ? 's' : ''}
             </Text>
           </TouchableOpacity>
+        </View>
+      ) : isEmpty ? (
+        <View style={s.center}>
+          <View style={[s.emptyIcon, { borderColor: `${C.orange}30`, backgroundColor: `${C.orange}10` }]}>
+            <Ionicons name={isContractor ? 'briefcase-outline' : 'person-outline'} size={36} color={C.orange} />
+          </View>
+          <Text style={s.emptyTitle}>
+            {isContractor ? 'No Open Jobs' : 'No Contractors Found'}
+          </Text>
+          <Text style={s.emptySub}>
+            {isContractor
+              ? 'No pending jobs right now. Check back soon or expand to a wider radius.'
+              : `No ${tradeFilter !== 'All' ? tradeFilter + ' ' : ''}contractors within ${radius} miles. Try expanding your search radius.`}
+          </Text>
+          {!isContractor && tradeFilter !== 'All' && (
+            <TouchableOpacity style={[s.emptyBtn, { backgroundColor: C.orange }]} onPress={() => setTradeFilter('All')}>
+              <Text style={s.emptyBtnText}>Clear Filter</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <>
