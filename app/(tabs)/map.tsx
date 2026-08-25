@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentPosition, reverseGeocode, Coords } from '@/lib/locationService';
 import { MAPBOX_ACCESS_TOKEN, DEFAULT_MAP_REGION } from '@/lib/mapConfig';
 import { ALL_TRADES, TRADE_ICONS } from '@/lib/tradeJobs';
+import { fromDbValue, getTrade } from '@/lib/map/trades';
 import { Ionicons } from '@expo/vector-icons';
 import MapboxGL from '@rnmapbox/maps';
 import { useRouter } from 'expo-router';
@@ -220,6 +221,13 @@ function distLabel(miles: number) {
     : `${miles.toFixed(1)} mi`;
 }
 
+// fromDbValue() already falls back to the same general Trade for an
+// unmatched string, but chaining getTrade() too means an unrecognized
+// trade can never fail to resolve to *some* valid, renderable Trade.
+function jobTrade(tradeValue: string) {
+  return fromDbValue(tradeValue) ?? getTrade(tradeValue);
+}
+
 function avatarColor(name: string) {
   const colors = ['#FF6200', '#7C3AED', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444'];
   let h = 0;
@@ -308,6 +316,7 @@ function JobCard({ item, onPress, C }: {
   C: AppColors;
 }) {
   const s = makeStyles(C);
+  const trade = jobTrade(item.trade);
   const when = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const areaLabel = item.town
     ? (item.nearest_major_road ? `${item.town} — near ${item.nearest_major_road}` : item.town)
@@ -316,13 +325,15 @@ function JobCard({ item, onPress, C }: {
   return (
     <TouchableOpacity style={s.card} onPress={onPress} activeOpacity={0.75}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-        <View style={s.jobBadge}><Text style={s.jobBadgeText}>{item.trade}</Text></View>
+        <View style={[s.jobBadge, { borderColor: `${trade.color}4D`, backgroundColor: `${trade.color}14` }]}>
+          <Text style={[s.jobBadgeText, { color: trade.color }]}>{trade.label}</Text>
+        </View>
         {item.price_estimate != null && (
           <Text style={s.jobPrice}>${item.price_estimate.toLocaleString()}</Text>
         )}
       </View>
       <Text style={s.jobDesc} numberOfLines={2}>
-        Approximate location — exact address shared when you're hired.
+        Approximate location — exact address shared when you’re hired.
       </Text>
       <Text style={s.jobMeta}>
         {areaLabel}{' · '}{when}
@@ -578,7 +589,7 @@ export default function MapScreen() {
               ? jobPins.map(j => (
                   <MapboxGL.MarkerView key={j.id} id={`job-${j.id}`} coordinate={[j.fuzzed_lng!, j.fuzzed_lat!]}>
                     <TouchableOpacity onPress={() => router.push(`/job/${j.id}` as any)} activeOpacity={0.8}>
-                      <View style={s.jobPin}>
+                      <View style={[s.jobPin, { backgroundColor: jobTrade(j.trade).color }]}>
                         <Ionicons name="briefcase" size={14} color="#fff" />
                       </View>
                     </TouchableOpacity>
