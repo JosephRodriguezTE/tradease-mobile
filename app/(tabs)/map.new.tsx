@@ -54,7 +54,7 @@ import Mapbox, {
 } from '@rnmapbox/maps';
 
 import {
-  TRADE_LIST,
+  FILTERABLE_TRADES,
   getTrade,
   type TradeId,
   type UrgencyId,
@@ -110,8 +110,6 @@ export interface PublicJob {
 export interface PublicContractor {
   id: string;
   businessName: string;
-  /** First name only until a job is claimed. */
-  contactFirstName: string;
   tradeId: TradeId;
   verified: boolean;
   /** Service-area center or opted-in storefront. */
@@ -639,7 +637,7 @@ function TradeFilter({
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.tradeRow}
     >
-      {TRADE_LIST.map((t) => {
+      {FILTERABLE_TRADES.map((t) => {
         const on = active.has(t.id);
         return (
           <Pressable
@@ -718,10 +716,11 @@ function CalloutCard({
       <Text style={styles.calloutTitle} numberOfLines={2}>
         {p.businessName}
       </Text>
-      <Text style={styles.calloutMeta}>
-        {p.contactFirstName}
-        {p.yearsInBusiness ? ` · ${p.yearsInBusiness} yrs on the Island` : ''}
-      </Text>
+      {p.yearsInBusiness != null && (
+        <Text style={styles.calloutMeta}>
+          {p.yearsInBusiness} yrs on the Island
+        </Text>
+      )}
       <Text style={styles.calloutFine}>{p.areaLabel}</Text>
     </View>
   );

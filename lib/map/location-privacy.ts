@@ -42,9 +42,15 @@ export interface PublicJobLocation extends LatLng {
 }
 
 export interface PublicContractorLocation extends LatLng {
-  /** 'area' = center of declared service area. 'exact' = opted-in storefront. */
-  mode: 'area' | 'exact';
-  /** Service radius in meters. Null when mode is 'exact'. */
+  /**
+   * 'service_area' = center of declared service area. 'storefront' =
+   * opted-in exact location. Named publicPinMode (not mode) so it can
+   * never be confused with contractors.location_mode in the database,
+   * which is an unrelated concept — 'live' | 'manual', GPS-tracked vs
+   * manually set position, not a privacy/display mode.
+   */
+  publicPinMode: 'service_area' | 'storefront';
+  /** Service radius in meters. Null when publicPinMode is 'storefront'. */
   serviceRadiusMeters: number | null;
   areaLabel: string;
 }
@@ -130,14 +136,19 @@ export function publicJobLocation(args: {
  *
  * Default is the service-area center, which is a point the contractor
  * chooses (usually the middle of where they work), NOT their address.
- * Exact mode requires two things to both be true, and the UI that sets
- * `hasCommercialAddress` must be a deliberate, explained opt-in — not a
- * checkbox buried in onboarding.
+ * Storefront mode requires two things to both be true, and the UI that
+ * sets `hasCommercialAddress` must be a deliberate, explained opt-in —
+ * not a checkbox buried in onboarding.
+ *
+ * Takes serviceRadiusMiles, not meters — contractors.service_radius_miles
+ * is the DB column, and this library works in meters internally.
+ * milesToMeters() converts at this boundary so a miles value can never be
+ * silently treated as meters.
  */
 export function publicContractorLocation(args: {
   contractorId: string;
   serviceAreaCenter: LatLng;
-  serviceRadiusMeters: number;
+  serviceRadiusMiles: number;
   town: string;
   showExactLocation: boolean;
   hasCommercialAddress: boolean;
@@ -145,7 +156,7 @@ export function publicContractorLocation(args: {
 }): PublicContractorLocation {
   const {
     serviceAreaCenter,
-    serviceRadiusMeters,
+    serviceRadiusMiles,
     town,
     showExactLocation,
     hasCommercialAddress,
@@ -158,7 +169,7 @@ export function publicContractorLocation(args: {
   if (exactAllowed && commercialLocation) {
     return {
       ...commercialLocation,
-      mode: 'exact',
+      publicPinMode: 'storefront',
       serviceRadiusMeters: null,
       areaLabel: town,
     };
@@ -166,8 +177,8 @@ export function publicContractorLocation(args: {
 
   return {
     ...serviceAreaCenter,
-    mode: 'area',
-    serviceRadiusMeters,
+    publicPinMode: 'service_area',
+    serviceRadiusMeters: milesToMeters(serviceRadiusMiles),
     areaLabel: `Serves ${town} and nearby`,
   };
 }
@@ -190,6 +201,16 @@ export function distanceMeters(a: LatLng, b: LatLng): number {
 
 export function metersToMiles(m: number): number {
   return m / 1609.344;
+}
+
+/**
+ * Explicit boundary conversion for DB columns stored in miles (e.g.
+ * contractors.service_radius_miles). This library works in meters
+ * internally — never pass a miles value where meters is expected without
+ * going through this first.
+ */
+export function milesToMeters(miles: number): number {
+  return miles * 1609.344;
 }
 
 /**
