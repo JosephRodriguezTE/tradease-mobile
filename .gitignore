@@ -44,3 +44,6 @@ yarn-error.*
 # editor / tooling config
 .claude/settings.json
 .idea/
+
+# Supabase CLI local scratch state
+supabase/.temp/
