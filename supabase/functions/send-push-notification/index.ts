@@ -1,9 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { getServiceKey } from "../_shared/secretKey.ts";
+import { isValidInternalSecret } from "../_shared/internalSecret.ts";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
-const INTERNAL_SECRET = "trd_int_8f3a9c2e7b41d6f0a5c8e2b9d4f7a1c3e6b8d0f2a4c7e9b1d3f5a7c9e1b3d5f7";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -16,7 +16,7 @@ Deno.serve(async (req: Request) => {
   // which knows this secret, may call this function. Closes the gap where
   // anyone with the URL could force-send a push for any guessed notification_id.
   const providedSecret = req.headers.get("x-tradease-internal");
-  if (providedSecret !== INTERNAL_SECRET) {
+  if (!isValidInternalSecret(providedSecret)) {
     return json({ error: "Unauthorized" }, 401);
   }
 

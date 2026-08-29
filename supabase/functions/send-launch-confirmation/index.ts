@@ -13,10 +13,10 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { getServiceKey } from '../_shared/secretKey.ts'
+import { isValidInternalSecret } from '../_shared/internalSecret.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_KEY = getServiceKey()
-const INTERNAL_SECRET = 'trd_int_8f3a9c2e7b41d6f0a5c8e2b9d4f7a1c3e6b8d0f2a4c7e9b1d3f5a7c9e1b3d5f7'
 
 interface LaunchSignup {
   id: string
@@ -41,12 +41,10 @@ serve(async (req: Request) => {
   }
 
   const providedSecret = req.headers.get('x-tradease-internal')
-  if (providedSecret !== INTERNAL_SECRET) {
+  if (!isValidInternalSecret(providedSecret)) {
     console.error(
       '[send-launch-confirmation] REJECTED — internal secret mismatch. received:',
       mask(providedSecret),
-      'expected:',
-      mask(INTERNAL_SECRET),
     )
     return new Response('Unauthorized', { status: 401 })
   }

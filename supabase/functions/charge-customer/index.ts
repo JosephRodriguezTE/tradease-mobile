@@ -7,8 +7,8 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { getServiceKey } from '../_shared/secretKey.ts';
+import { getInternalSecret, isValidInternalSecret } from '../_shared/internalSecret.ts';
 
-const INTERNAL_SECRET = 'trd_int_8f3a9c2e7b41d6f0a5c8e2b9d4f7a1c3e6b8d0f2a4c7e9b1d3f5a7c9e1b3d5f7';
 const STRIPE_SECRET_KEY = Deno.env.get('STRIPE_SECRET_KEY')!;
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = getServiceKey();
@@ -47,7 +47,7 @@ Deno.serve(async (req: Request) => {
   // Auth: internal secret OR valid user JWT for customer-triggered approvals
   const internalSecret = req.headers.get('x-tradease-internal');
   const authHeader = req.headers.get('Authorization');
-  const isInternal = internalSecret === INTERNAL_SECRET;
+  const isInternal = isValidInternalSecret(internalSecret);
 
   const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
@@ -163,7 +163,7 @@ Deno.serve(async (req: Request) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-tradease-internal': INTERNAL_SECRET,
+          'x-tradease-internal': getInternalSecret(),
         },
         body: JSON.stringify({
           template: 'payment_approved',
