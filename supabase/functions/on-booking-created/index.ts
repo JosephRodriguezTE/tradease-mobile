@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { getServiceKey } from "../_shared/secretKey.ts";
+import { isValidInternalSecret } from "../_shared/internalSecret.ts";
 
 const TRADE_CATEGORIES = [
   "Electrical", "Plumbing", "HVAC", "Handyman", "Roofing",
@@ -9,6 +10,15 @@ const TRADE_CATEGORIES = [
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok");
+
+  // Internal-only: only trigger_job_matching, which knows this secret, may
+  // call this function. Previously had no application-level check at all —
+  // verify_jwt: true let any valid JWT through, including the public anon
+  // key, which triggers a real Anthropic API call and a bookings write.
+  const providedSecret = req.headers.get("x-tradease-internal");
+  if (!isValidInternalSecret(providedSecret)) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const supabaseUrl  = Deno.env.get("SUPABASE_URL")!;
   const serviceKey   = getServiceKey();
