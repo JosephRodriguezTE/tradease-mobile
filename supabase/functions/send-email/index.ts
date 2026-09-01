@@ -78,7 +78,7 @@ serve(async (req: Request) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'Tradease <hello@send.tradease.tech>',
+        from: 'Tradease <hello@tradease.tech>',
         to: [payload.to],
         subject: payload.subject,
         html,
