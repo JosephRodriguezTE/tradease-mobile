@@ -71,8 +71,12 @@ export async function unregisterPushToken(userId: string, role: 'customer' | 'co
 }
 
 // ─── Send push notification ───────────────────────────────────────────────────
-// Inserts a row into `notifications` then invokes the Edge Function to deliver
-// an Expo push to the recipient's device. Non-fatal — errors are swallowed.
+// Inserts a row into `notifications`. trigger_send_push_notification fires on
+// that insert -- unconditionally, for every row regardless of who inserted it
+// -- and delivers the Expo push itself; this used to also invoke
+// send-push-notification directly, which was redundant with the trigger
+// (risking a duplicate push) and sent the caller's own JWT, which the
+// function doesn't accept anyway. Non-fatal — errors are swallowed.
 
 export async function sendPushNotification({
   userId,
@@ -94,7 +98,7 @@ export async function sendPushNotification({
   data?: Record<string, unknown>;
 }): Promise<void> {
   try {
-    const { data: notif, error } = await supabase
+    await supabase
       .from('notifications')
       .insert({
         user_id:    userId,
@@ -106,15 +110,7 @@ export async function sendPushNotification({
         icon:       icon ?? null,
         read:       false,
         data,
-      })
-      .select('id')
-      .single();
-
-    if (error || !notif) return;
-
-    supabase.functions.invoke('send-push-notification', {
-      body: { notification_id: notif.id },
-    }).catch(() => {});
+      });
   } catch (_) {}
 }
 
