@@ -37,7 +37,7 @@ Deno.serve(async (req: Request) => {
     // Fetch booking details
     const { data: booking, error: bookingErr } = await db
       .from("bookings")
-      .select("id, trade, description, notes, customer_id, job_title")
+      .select("id, trade, description, notes, customer_id, title")
       .eq("id", bookingId)
       .single();
 
