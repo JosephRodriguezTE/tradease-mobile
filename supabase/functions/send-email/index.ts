@@ -6,9 +6,7 @@
 // Resend docs: https://resend.com/docs/api-reference/emails/send-email
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
-import { getServiceKey } from '../_shared/secretKey.ts'
-
-const SERVICE_ROLE_KEY = getServiceKey()
+import { isValidInternalSecret } from '../_shared/internalSecret.ts'
 
 type EmailType =
   | 'booking_confirmation'
@@ -18,17 +16,43 @@ type EmailType =
   | 'new_message'
   | 'job_completed'
   | 'job_accepted'
+  | 'job_accepted_customer'
+  | 'job_accepted_contractor'
   | 'job_cancelled'
   | 'new_job_nearby'
   | 'work_order_submitted'
   | 'review_received'
   | 'launch_signup_confirmation'
+  | 'payment_approved'
+
+// Postgres callers (send_email(), charge-customer) send `template` instead
+// of `type` and don't pass `subject` at all — DEFAULT_SUBJECTS below covers
+// those. Website callers pass `type` + `subject` explicitly and take
+// precedence when both are present.
+interface RawEmailPayload {
+  to: string
+  subject?: string
+  type?: EmailType
+  template?: EmailType
+  data: Record<string, unknown>
+}
 
 interface EmailPayload {
   to: string
   subject: string
   type: EmailType
   data: Record<string, unknown>
+}
+
+const DEFAULT_SUBJECTS: Partial<Record<EmailType, string>> = {
+  job_accepted_customer: 'A contractor accepted your job',
+  job_accepted_contractor: 'You accepted a new job',
+  job_completed: 'Your job is complete',
+  new_job_nearby: 'New job near you',
+  new_message: 'New message on Tradease',
+  payment_approved: 'Payment approved — funds on the way',
+  verification_approved: 'Your verification was approved',
+  verification_rejected: 'Verification update needed',
 }
 
 const CORS_HEADERS = {
@@ -45,20 +69,24 @@ serve(async (req: Request) => {
     return new Response('Method not allowed', { status: 405, headers: CORS_HEADERS })
   }
 
-  const authHeader = req.headers.get('Authorization')
-  if (!authHeader || authHeader !== `Bearer ${SERVICE_ROLE_KEY}`) {
+  const providedSecret = req.headers.get('x-tradease-internal')
+  if (!isValidInternalSecret(providedSecret)) {
     return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS })
   }
 
   try {
-    const payload: EmailPayload = await req.json()
+    const raw: RawEmailPayload = await req.json()
+    const type = raw.type ?? raw.template
+    const subject = raw.subject ?? (type ? DEFAULT_SUBJECTS[type] : undefined)
 
-    if (!payload.to || !payload.subject || !payload.type) {
-      return new Response(JSON.stringify({ error: 'Missing required fields: to, subject, type' }), {
+    if (!raw.to || !subject || !type) {
+      return new Response(JSON.stringify({ error: 'Missing required fields: to, type (or template)' }), {
         status: 400,
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       })
     }
+
+    const payload: EmailPayload = { to: raw.to, subject, type, data: raw.data }
 
     const html = buildEmailHtml(payload)
 
@@ -235,6 +263,36 @@ function buildEmailHtml(payload: EmailPayload): string {
         <p style="color:#9A9A9A;margin:0 0 24px;">${escapeHtml(data.contractorName ?? 'A contractor')} accepted your job. They will be in touch to confirm details.</p>
         <a href="https://tradease.tech/dashboard" style="display:inline-block;background:#FF6200;color:#fff;text-decoration:none;border-radius:10px;padding:12px 24px;font-weight:700;font-size:14px;">
           View Job →
+        </a>
+      `)
+
+    case 'job_accepted_customer':
+      return wrapper(`
+        <h1 style="font-size:22px;font-weight:800;margin:0 0 8px;color:#F0F0F0;">Contractor Matched 🤝</h1>
+        <p style="color:#9A9A9A;margin:0 0 24px;">${escapeHtml(data.contractorName ?? 'A contractor')} accepted your ${escapeHtml(data.trade ?? '')} job at ${escapeHtml(data.address ?? 'your address')}.</p>
+        ${data.priceEstimate ? `<p style="color:#9A9A9A;font-size:14px;margin:0 0 24px;"><strong style="color:#F0F0F0;">Estimate:</strong> ${escapeHtml(data.priceEstimate)}</p>` : ''}
+        <a href="https://tradease.tech/dashboard" style="display:inline-block;background:#FF6200;color:#fff;text-decoration:none;border-radius:10px;padding:12px 24px;font-weight:700;font-size:14px;">
+          View Job →
+        </a>
+      `)
+
+    case 'job_accepted_contractor':
+      return wrapper(`
+        <h1 style="font-size:22px;font-weight:800;margin:0 0 8px;color:#F0F0F0;">You accepted a job ✅</h1>
+        <p style="color:#9A9A9A;margin:0 0 24px;">You're confirmed for a ${escapeHtml(data.trade ?? '')} job at ${escapeHtml(data.address ?? 'the customer’s address')} for ${escapeHtml(data.customerName ?? 'the customer')}.</p>
+        ${data.priceEstimate ? `<p style="color:#9A9A9A;font-size:14px;margin:0 0 24px;"><strong style="color:#F0F0F0;">Estimate:</strong> ${escapeHtml(data.priceEstimate)}</p>` : ''}
+        <a href="https://tradease.tech/dashboard" style="display:inline-block;background:#FF6200;color:#fff;text-decoration:none;border-radius:10px;padding:12px 24px;font-weight:700;font-size:14px;">
+          View Job →
+        </a>
+      `)
+
+    case 'payment_approved':
+      return wrapper(`
+        <h1 style="font-size:22px;font-weight:800;margin:0 0 8px;color:#22C55E;">Payment approved 💰</h1>
+        <p style="color:#9A9A9A;margin:0 0 24px;">${escapeHtml(data.customerName ?? 'Your customer')} approved payment for the ${escapeHtml(data.trade ?? '')} job. Funds are on the way.</p>
+        ${data.amount ? `<div style="background:#222;border:1px solid #2E2E2E;border-radius:10px;padding:16px 18px;margin-bottom:24px;"><p style="margin:0;font-size:14px;"><strong>Amount:</strong> <span style="color:#22C55E;font-weight:700;">$${escapeHtml(data.amount)}</span></p></div>` : ''}
+        <a href="https://tradease.tech/dashboard" style="display:inline-block;background:#FF6200;color:#fff;text-decoration:none;border-radius:10px;padding:12px 24px;font-weight:700;font-size:14px;">
+          View Details →
         </a>
       `)
 
