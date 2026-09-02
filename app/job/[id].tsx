@@ -327,8 +327,8 @@ export default function JobDetailScreen() {
       body:         `✅ ${booking.trade ?? 'Job'} confirmed — your contractor is ready to begin. Unlimited messaging enabled.`,
       read:         false,
       is_system:    true,
-      sender_role:  'system',
-    }).then(() => {});
+      sender_role:  'customer',
+    }).catch(err => console.warn('[job] system message insert failed:', err));
 
     setOfferSaving(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -402,14 +402,14 @@ export default function JobDetailScreen() {
     }, { onConflict: 'booking_id', ignoreDuplicates: true });
     supabase.from('messages').insert({
       chat_id:      deriveChatId(booking.customer_id, user.id),
-      sender_id:    booking.customer_id,
-      recipient_id: user.id,
+      sender_id:    user.id,
+      recipient_id: booking.customer_id,
       sender_name:  'Tradease',
       body:         `⚡ ${booking.trade ?? 'Job'} booked instantly — your contractor is confirmed and ready to begin.`,
       read:         false,
       is_system:    true,
-      sender_role:  'system',
-    }).then(() => {});
+      sender_role:  'contractor',
+    }).catch(err => console.warn('[job] system message insert failed:', err));
     setOfferSaving(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setBooking((p: any) => ({ ...p, status: 'confirmed', contractor_id: user.id }));

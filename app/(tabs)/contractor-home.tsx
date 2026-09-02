@@ -989,14 +989,14 @@ export default function ContractorHomeScreen() {
     }, { onConflict: 'booking_id', ignoreDuplicates: true });
     supabase.from('messages').insert({
       chat_id:      deriveChatId(job.customer_id, contractor.id),
-      sender_id:    job.customer_id,
-      recipient_id: contractor.id,
+      sender_id:    contractor.id,
+      recipient_id: job.customer_id,
       sender_name:  'Tradease',
       body:         `⚡ ${job.trade ?? 'Job'} booked instantly — your contractor is confirmed and ready to begin.`,
       read:         false,
       is_system:    true,
-      sender_role:  'system',
-    }).then(() => {});
+      sender_role:  'contractor',
+    }).catch(err => console.warn('[contractor-home] system message insert failed:', err));
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     router.push(`/work-order/contractor?booking_id=${job.id}` as any);
   }
