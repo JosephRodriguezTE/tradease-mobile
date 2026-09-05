@@ -179,7 +179,15 @@ export default function PersonalInfoScreen() {
         { text: 'OK', onPress: () => router.canGoBack() ? router.back() : router.replace('/(tabs)') },
       ]);
     } catch (err: any) {
-      Alert.alert('Error', err.message);
+      // "Network request failed" is RN's fetch-layer error — the request
+      // never reached the server at all (no connectivity/DNS/timeout), a
+      // different failure than a server rejecting a bad payload. Give it
+      // an actionable message instead of the raw TypeError text.
+      const isNetworkError = err instanceof TypeError || /network request failed/i.test(err?.message ?? '');
+      Alert.alert(
+        isNetworkError ? 'Connection problem' : 'Error',
+        isNetworkError ? "Couldn't reach the server. Check your connection and try again." : err.message
+      );
     } finally {
       setSaving(false);
     }
