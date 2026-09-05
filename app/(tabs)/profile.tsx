@@ -603,19 +603,6 @@ function ContractorProfileView({ profile, isOwner, teamActiveCount }: {
         <VerificationBanner status={profile?.verification_status} router={router} />
       </View>
 
-      {/* Pending approval banner */}
-      {!profile?.approved && (
-        <View style={styles.pendingBanner}>
-          <Text style={styles.pendingIcon}>⏳</Text>
-          <View style={styles.pendingInfo}>
-            <Text style={styles.pendingTitle}>Profile Under Review</Text>
-            <Text style={styles.pendingSub}>
-              Our team reviews contractor applications within 24 hours.
-            </Text>
-          </View>
-        </View>
-      )}
-
       {/* Trusted account status banner */}
       {isOwner && (
         obScore >= 100 ? (
