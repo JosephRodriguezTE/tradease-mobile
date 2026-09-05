@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import { decode as decodeBase64 } from 'base64-arraybuffer';
 import { supabase } from '@/lib/supabase';
 import { useTheme, AppColors } from '@/context/ThemeContext';
 import { Font, Radius } from '../../constants/theme';
@@ -199,6 +200,7 @@ export default function GetVerifiedScreen() {
   const [licenseDocUri,    setLicenseDocUri]    = useState('');
   const [licenseDocName,   setLicenseDocName]   = useState('');
   const [licenseDocMime,   setLicenseDocMime]   = useState('image/jpeg');
+  const [licenseDocB64,    setLicenseDocB64]    = useState<string | null>(null);
 
   // Step 3 — Insurance
   const [insuranceProvider, setInsuranceProvider] = useState('');
@@ -208,11 +210,13 @@ export default function GetVerifiedScreen() {
   const [insDocUri,          setInsDocUri]          = useState('');
   const [insDocName,         setInsDocName]         = useState('');
   const [insDocMime,         setInsDocMime]         = useState('image/jpeg');
+  const [insDocB64,          setInsDocB64]          = useState<string | null>(null);
 
   // Step 4 — Government ID
   const [govIdUri,  setGovIdUri]  = useState('');
   const [govIdName, setGovIdName] = useState('');
   const [govIdMime, setGovIdMime] = useState('image/jpeg');
+  const [govIdB64,  setGovIdB64]  = useState<string | null>(null);
 
   // Pre-fill from contractor profile
   useEffect(() => {
@@ -244,7 +248,7 @@ export default function GetVerifiedScreen() {
 
   // ── File pickers ─────────────────────────────────────────────────────────────
 
-  async function pickImage(setUri: (s: string) => void, setName: (s: string) => void, setMime: (s: string) => void) {
+  async function pickImage(setUri: (s: string) => void, setName: (s: string) => void, setMime: (s: string) => void, setB64: (s: string | null) => void) {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission needed', 'Please allow access to your photos.');
@@ -254,46 +258,66 @@ export default function GetVerifiedScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.85,
       allowsEditing: false,
+      // Gallery-picked images (screenshots especially) commonly come back as
+      // content:// URIs on Android, which RN's fetch polyfill does not
+      // reliably turn into bytes (see uploadFile below) — base64 sidesteps
+      // reading the URI a second time entirely.
+      base64: true,
     });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
+      setB64(asset.base64 ?? null);
       setUri(asset.uri);
       setName(asset.fileName ?? `doc_${Date.now()}.jpg`);
       setMime(asset.mimeType ?? 'image/jpeg');
     }
   }
 
-  async function pickDoc(setUri: (s: string) => void, setName: (s: string) => void, setMime: (s: string) => void) {
+  async function pickDoc(setUri: (s: string) => void, setName: (s: string) => void, setMime: (s: string) => void, setB64: (s: string | null) => void) {
     const result = await DocumentPicker.getDocumentAsync({ type: 'application/pdf', copyToCacheDirectory: true });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
       setUri(asset.uri);
       setName(asset.name);
       setMime('application/pdf');
+      // Clear any base64 left over from a prior image pick for this same
+      // field — otherwise uploadFile would upload stale image bytes under
+      // the new PDF's path.
+      setB64(null);
     }
   }
 
   // ── Upload single file ────────────────────────────────────────────────────────
 
-  async function uploadFile(uri: string, mime: string, storagePath: string): Promise<string | null> {
+  type UploadResult = { ok: true; path: string } | { ok: false; error: string };
+
+  async function uploadFile(uri: string, mime: string, storagePath: string, base64?: string | null): Promise<UploadResult> {
     try {
-      const response = await fetch(uri);
-      // .arrayBuffer(), not .blob() — RN's fetch polyfill is unreliable
-      // converting local file:// URIs to Blob on Android.
-      const buffer = await response.arrayBuffer();
+      // Prefer the base64 the picker already gave us over re-reading the
+      // URI. Gallery-picked images (screenshots especially) commonly come
+      // back as content:// URIs on Android, and fetch(uri).arrayBuffer()
+      // is not reliable for those — this is the same class of issue the
+      // .blob() vs .arrayBuffer() choice above was already working around,
+      // just one layer further in. PDFs (copyToCacheDirectory: true, so
+      // always a real file:// path) keep using fetch — no base64 available
+      // from the document picker for those.
+      const buffer = base64
+        ? decodeBase64(base64)
+        : await (await fetch(uri)).arrayBuffer();
       const ext = mime === 'application/pdf' ? 'pdf' : (mime.split('/')[1] || 'jpg');
       const fullPath = `${storagePath}.${ext}`;
       const { error } = await supabase.storage
         .from('verification-docs')
         .upload(fullPath, buffer, { contentType: mime, upsert: true });
       if (error) throw error;
-      return fullPath;
+      return { ok: true, path: fullPath };
     } catch (e: any) {
+      const message = e?.message ?? 'Upload failed';
       Sentry.captureException(
-        e instanceof Error ? e : new Error(e?.message ?? 'Verification document upload failed'),
-        { tags: { feature: 'get-verified-upload' }, extra: { storagePath, mime } }
+        e instanceof Error ? e : new Error(message),
+        { tags: { feature: 'get-verified-upload' }, extra: { storagePath, mime, hadBase64: !!base64 } }
       );
-      return null;
+      return { ok: false, error: message };
     }
   }
 
@@ -305,16 +329,26 @@ export default function GetVerifiedScreen() {
       const uid = contractorId;
       if (!uid) throw new Error('Not logged in');
 
-      const [licPath, insPath, idPath] = await Promise.all([
-        uploadFile(licenseDocUri,  licenseDocMime, `verification/${uid}/license`),
-        uploadFile(insDocUri,      insDocMime,     `verification/${uid}/insurance`),
-        uploadFile(govIdUri,       govIdMime,      `verification/${uid}/id`),
+      const [licRes, insRes, idRes] = await Promise.all([
+        uploadFile(licenseDocUri,  licenseDocMime, `verification/${uid}/license`,   licenseDocB64),
+        uploadFile(insDocUri,      insDocMime,     `verification/${uid}/insurance`, insDocB64),
+        uploadFile(govIdUri,       govIdMime,      `verification/${uid}/id`,        govIdB64),
       ]);
 
-      if (!licPath || !insPath || !idPath) {
-        Alert.alert('Upload failed', 'Could not upload one or more documents. Please try again.');
+      const failed = [
+        !licRes.ok && `Trade License (${licRes.error})`,
+        !insRes.ok && `Insurance (${insRes.error})`,
+        !idRes.ok  && `Government ID (${idRes.error})`,
+      ].filter(Boolean) as string[];
+
+      if (failed.length > 0) {
+        Alert.alert('Upload failed', `Could not upload: ${failed.join(', ')}. Please try again.`);
         return;
       }
+
+      const licPath = (licRes as { ok: true; path: string }).path;
+      const insPath = (insRes as { ok: true; path: string }).path;
+      const idPath  = (idRes  as { ok: true; path: string }).path;
 
       const expiryDate = `${expiryYear}-${String(expiryMonth).padStart(2, '0')}-01`;
 
@@ -456,8 +490,8 @@ export default function GetVerifiedScreen() {
         label="License Document"
         uri={licenseDocUri}
         fileName={licenseDocName}
-        onPickImage={() => pickImage(setLicenseDocUri, setLicenseDocName, setLicenseDocMime)}
-        onPickDoc={() => pickDoc(setLicenseDocUri, setLicenseDocName, setLicenseDocMime)}
+        onPickImage={() => pickImage(setLicenseDocUri, setLicenseDocName, setLicenseDocMime, setLicenseDocB64)}
+        onPickDoc={() => pickDoc(setLicenseDocUri, setLicenseDocName, setLicenseDocMime, setLicenseDocB64)}
         C={C}
       />
     </>,
@@ -489,8 +523,8 @@ export default function GetVerifiedScreen() {
         label="Insurance Certificate"
         uri={insDocUri}
         fileName={insDocName}
-        onPickImage={() => pickImage(setInsDocUri, setInsDocName, setInsDocMime)}
-        onPickDoc={() => pickDoc(setInsDocUri, setInsDocName, setInsDocMime)}
+        onPickImage={() => pickImage(setInsDocUri, setInsDocName, setInsDocMime, setInsDocB64)}
+        onPickDoc={() => pickDoc(setInsDocUri, setInsDocName, setInsDocMime, setInsDocB64)}
         C={C}
       />
       <View style={st.note}>
@@ -505,8 +539,8 @@ export default function GetVerifiedScreen() {
         label="Government-Issued Photo ID"
         uri={govIdUri}
         fileName={govIdName}
-        onPickImage={() => pickImage(setGovIdUri, setGovIdName, setGovIdMime)}
-        onPickDoc={() => pickDoc(setGovIdUri, setGovIdName, setGovIdMime)}
+        onPickImage={() => pickImage(setGovIdUri, setGovIdName, setGovIdMime, setGovIdB64)}
+        onPickDoc={() => pickDoc(setGovIdUri, setGovIdName, setGovIdMime, setGovIdB64)}
         C={C}
       />
       <View style={[st.note, { marginTop: SP[2] }]}>
