@@ -50,7 +50,7 @@ export async function flushOfflineQueue(): Promise<{ flushed: number; failed: nu
       if (mutation.kind === 'checklist_check') {
         const { error } = await supabase
           .from('work_progress_items')
-          .update({ completed: mutation.completed })
+          .update({ is_done: mutation.completed })
           .eq('id', mutation.item_id);
         if (error) throw error;
       } else if (mutation.kind === 'checklist_add') {

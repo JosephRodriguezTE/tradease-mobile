@@ -866,20 +866,22 @@ function CompletionSheet({
     setPhase('processing');
     try {
       // 1. Submit review
-      await supabase.from('reviews').insert({
-        work_order_id: wo.id,
-        contractor_id: wo.contractor_id,
-        customer_id:   wo.customer_id,
-        rating:        stars,
-        body:          review.trim() || null,
+      const { error: reviewErr } = await supabase.from('reviews').insert({
+        booking_id:     wo.booking_id,
+        contractor_id:  wo.contractor_id,
+        customer_id:    wo.customer_id,
+        rating_overall: stars,
+        review_text:    review.trim() || null,
       });
+      if (reviewErr) throw reviewErr;
 
       // 2. Capture payment (mock) — stores both grand total and tip for receipt
       if (pi) {
-        await supabase.from('payment_intents').update({
+        const { error: piErr } = await supabase.from('payment_intents').update({
           status: 'captured', captured_at: new Date().toISOString(),
           amount_cents: grandTotal, tip_cents: tipCents,
         }).eq('id', pi.id);
+        if (piErr) throw piErr;
       }
 
       // 3. Transition to completed

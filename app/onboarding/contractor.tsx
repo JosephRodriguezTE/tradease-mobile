@@ -270,8 +270,6 @@ export default function ContractorOnboarding() {
         verified: false,
         verification_status: 'pending_review',
         verification_submitted_at: new Date().toISOString(),
-        agreed_to_liability: true,
-        agreed_to_liability_at: new Date().toISOString(),
       });
       if (error) throw error;
       router.replace('/(tabs)');
