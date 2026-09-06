@@ -13,6 +13,7 @@ import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { Text, TextInput } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastProvider } from '../components/Toast';
 import { useNotifications } from '../hooks/useNotifications';
@@ -75,6 +76,7 @@ function RootLayout() {
   if (!fontsLoaded) return null;
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <ThemeProvider>
       <SafeAreaProvider>
         <ToastProvider>
@@ -149,6 +151,7 @@ function RootLayout() {
         </ToastProvider>
       </SafeAreaProvider>
     </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
 
