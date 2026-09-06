@@ -328,7 +328,7 @@ export default function JobDetailScreen() {
       read:         false,
       is_system:    true,
       sender_role:  'customer',
-    }).catch(err => console.warn('[job] system message insert failed:', err));
+    }).then(() => {}, (err: unknown) => console.warn('[job] system message insert failed:', err));
 
     setOfferSaving(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -409,7 +409,7 @@ export default function JobDetailScreen() {
       read:         false,
       is_system:    true,
       sender_role:  'contractor',
-    }).catch(err => console.warn('[job] system message insert failed:', err));
+    }).then(() => {}, (err: unknown) => console.warn('[job] system message insert failed:', err));
     setOfferSaving(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setBooking((p: any) => ({ ...p, status: 'confirmed', contractor_id: user.id }));

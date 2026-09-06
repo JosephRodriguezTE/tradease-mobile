@@ -996,7 +996,7 @@ export default function ContractorHomeScreen() {
       read:         false,
       is_system:    true,
       sender_role:  'contractor',
-    }).catch(err => console.warn('[contractor-home] system message insert failed:', err));
+    }).then(() => {}, (err: unknown) => console.warn('[contractor-home] system message insert failed:', err));
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     router.push(`/work-order/contractor?booking_id=${job.id}` as any);
   }
