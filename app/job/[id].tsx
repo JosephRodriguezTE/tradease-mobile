@@ -275,6 +275,34 @@ export default function JobDetailScreen() {
     return () => { supabase.removeChannel(ch); };
   }, [id]);
 
+  // Realtime booking updates. Without this, a real accept_job /
+  // customer_respond_offer / contractor_respond_counter write lands in the
+  // database but this screen never shows it until the user manually
+  // refreshes -- the initial load above only fetches bookings once.
+  useEffect(() => {
+    if (!id) return;
+
+    const channelName = `job_booking_detail:${id}`;
+
+    supabase.getChannels().forEach(ch => {
+      if (ch.topic === `realtime:${channelName}`) supabase.removeChannel(ch);
+    });
+
+    const ch = supabase
+      .channel(channelName)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'bookings',
+        filter: `id=eq.${id}`,
+      }, ({ new: updated }) => {
+        // postgres_changes payloads carry only bookings' own columns, not
+        // the contractor:contractor_id(...) join from the initial fetch --
+        // merge onto the existing row instead of replacing it.
+        setBooking((p: any) => (p ? { ...p, ...updated } : updated));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [id]);
+
   // Show review prompt when customer's job is approved and no review submitted yet
   useEffect(() => {
     if (!id || !isCustomer || !booking) return;
