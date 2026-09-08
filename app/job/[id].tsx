@@ -290,32 +290,15 @@ export default function JobDetailScreen() {
   async function acceptQuote() {
     if (!offer) return;
     setOfferSaving(true);
-    await supabase.from('job_offers').update({ status: 'accepted', customer_action: 'accepted', final_price: offer.quoted_price }).eq('id', offer.id);
-    const bookingUpdates: Record<string, any> = {
-      status:         'confirmed',
-      price_estimate: offer.quoted_price,
-      contractor_id:  offer.contractor_id,
-    };
-    if (offer.scheduled_at) bookingUpdates.scheduled_at = offer.scheduled_at;
-    if (offer.booking_time) bookingUpdates.booking_time  = offer.booking_time;
-    await supabase.from('bookings').update(bookingUpdates).eq('id', id);
-
-    // Create work order so both parties can access it immediately
-    const { data: ctxr } = await supabase
-      .from('contractors_public')
-      .select('company_name')
-      .eq('id', offer.contractor_id)
-      .single();
-    await supabase.from('work_orders').upsert({
-      booking_id:      id as string,
-      contractor_id:   offer.contractor_id,
-      customer_id:     booking.customer_id,
-      service_type:    booking.trade,
-      job_address:     booking.job_address || booking.notes || '',
-      contractor_name: ctxr?.company_name || '',
-      customer_name:   booking.customer_name || '',
-      wo_status:       'accepted',
-    }, { onConflict: 'booking_id', ignoreDuplicates: true });
+    const { error } = await supabase.rpc('customer_respond_offer', {
+      p_offer_id: offer.id,
+      p_action: 'accepted',
+    });
+    if (error) {
+      setOfferSaving(false);
+      Alert.alert('Error', error.message || 'Could not accept quote. Try again.');
+      return;
+    }
 
     // Seed the chat thread so both parties see it in Messages immediately
     const chatId = deriveChatId(booking.customer_id, offer.contractor_id);
