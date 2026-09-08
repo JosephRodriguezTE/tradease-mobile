@@ -370,7 +370,7 @@ export default function JobDetailScreen() {
 
   async function acceptInstantBook() {
     if (!booking || !user) return;
-    const { data: myContractor } = await supabase.from('contractors').select('verification_status').eq('id', user.id).single();
+    const { data: myContractor } = await supabase.from('contractors').select('verification_status, company_name').eq('id', user.id).single();
     if (myContractor?.verification_status !== 'approved') {
       Alert.alert('Verification Required', 'Complete verification before accepting jobs.', [
         { text: 'Later', style: 'cancel' },
@@ -379,27 +379,20 @@ export default function JobDetailScreen() {
       return;
     }
     setOfferSaving(true);
-    const { data: claimed, error } = await supabase.from('bookings').update({
-      contractor_id: user.id,
-      status: 'confirmed',
-    }).eq('id', id).select();
-    if (error) { setOfferSaving(false); Alert.alert('Error', 'Could not accept job.'); return; }
-    if (!claimed || claimed.length === 0) {
+    const { error } = await supabase.rpc('accept_job', {
+      p_booking_id: id as string,
+      p_contractor_id: user.id,
+      p_contractor_name: myContractor?.company_name || '',
+    });
+    if (error) {
       setOfferSaving(false);
-      Alert.alert('Job Unavailable', 'This job was already accepted by another contractor.');
+      if (error.message?.includes('already taken')) {
+        Alert.alert('Job Unavailable', 'This job was already accepted by another contractor.');
+      } else {
+        Alert.alert('Error', error.message || 'Could not accept job.');
+      }
       return;
     }
-    const { data: ctxr } = await supabase.from('contractors').select('company_name').eq('id', user.id).single();
-    await supabase.from('work_orders').upsert({
-      booking_id:      id as string,
-      contractor_id:   user.id,
-      customer_id:     booking.customer_id,
-      service_type:    booking.trade,
-      job_address:     booking.job_address || booking.notes || '',
-      contractor_name: ctxr?.company_name || '',
-      customer_name:   booking.customer_name || '',
-      wo_status:       'accepted',
-    }, { onConflict: 'booking_id', ignoreDuplicates: true });
     supabase.from('messages').insert({
       chat_id:      deriveChatId(booking.customer_id, user.id),
       sender_id:    user.id,
