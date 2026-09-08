@@ -967,26 +967,19 @@ export default function ContractorHomeScreen() {
       ]);
       return;
     }
-    const { data: claimed, error } = await supabase.from('bookings').update({
-      contractor_id: contractor.id,
-      status: 'confirmed',
-    }).eq('id', job.id).select();
-    if (error) { Alert.alert('Error', 'Could not accept job. Try again.'); return; }
-    if (!claimed || claimed.length === 0) {
-      Alert.alert('Job Unavailable', 'This job was already accepted by another contractor.');
+    const { error } = await supabase.rpc('accept_job', {
+      p_booking_id: job.id,
+      p_contractor_id: contractor.id,
+      p_contractor_name: contractor.company_name ?? '',
+    });
+    if (error) {
+      if (error.message?.includes('already taken')) {
+        Alert.alert('Job Unavailable', 'This job was already accepted by another contractor.');
+      } else {
+        Alert.alert('Error', error.message || 'Could not accept job. Try again.');
+      }
       return;
     }
-    await supabase.from('work_orders').upsert({
-      booking_id:      job.id,
-      contractor_id:   contractor.id,
-      customer_id:     job.customer_id,
-      service_type:    job.trade,
-      job_address:     job.job_address ?? '',
-      contractor_name: contractor.company_name ?? '',
-      customer_name:   job.customer_name ?? '',
-      status:          'active',
-      wo_status:       'accepted',
-    }, { onConflict: 'booking_id', ignoreDuplicates: true });
     supabase.from('messages').insert({
       chat_id:      deriveChatId(job.customer_id, contractor.id),
       sender_id:    contractor.id,
