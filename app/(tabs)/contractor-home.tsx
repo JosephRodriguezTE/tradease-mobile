@@ -861,38 +861,11 @@ export default function ContractorHomeScreen() {
         ]);
         return;
       }
-      const { error } = await supabase
-        .from('job_offers')
-        .update({ status: 'accepted', contractor_final: 'accepted', final_price: counterPrice })
-        .eq('id', offerId);
-      if (error) { Alert.alert('Error', 'Could not accept. Try again.'); return; }
-
-      const bookingUpdates: Record<string, any> = { status: 'confirmed', price_estimate: counterPrice, contractor_id: contractor.id };
-      if (scheduledAt) bookingUpdates.scheduled_at = scheduledAt;
-      await supabase
-        .from('bookings')
-        .update(bookingUpdates)
-        .eq('id', bookingId);
-
-      // Create work order so both parties can access it immediately
-      const { data: bookingRow } = await supabase
-        .from('bookings')
-        .select('customer_id, customer_name, trade, job_address, notes')
-        .eq('id', bookingId)
-        .single();
-      if (bookingRow) {
-        await supabase.from('work_orders').upsert({
-          booking_id:      bookingId,
-          contractor_id:   contractor.id,
-          customer_id:     bookingRow.customer_id,
-          service_type:    bookingRow.trade,
-          job_address:     bookingRow.job_address || bookingRow.notes || '',
-          contractor_name: contractor.company_name || '',
-          customer_name:   bookingRow.customer_name || '',
-          status:          'active',
-          wo_status:       'accepted',
-        }, { onConflict: 'booking_id', ignoreDuplicates: true });
-      }
+      const { error } = await supabase.rpc('contractor_respond_counter', {
+        p_offer_id: offerId,
+        p_action: 'accepted',
+      });
+      if (error) { Alert.alert('Error', error.message || 'Could not accept. Try again.'); return; }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setActiveOffers(prev => prev.filter(o => o.id !== offerId));
