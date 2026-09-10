@@ -32,7 +32,7 @@ const STATUS: Record<string, { color: string; label: string }> = {
 const TRADE_EMOJI: Record<string, string> = {
   Plumbing: '🔧', Electrical: '⚡', HVAC: '❄️', Carpentry: '🪚',
   Roofing: '🏠', Painting: '🎨', Landscaping: '🌿', Handyman: '🔨',
-  Mechanical: '⚙️', Cleaning: '🧹', 'General Contracting': '🏗️',
+  Cleaning: '🧹', 'General Contracting': '🏗️',
 };
 
 const FILTERS = ['All', 'Active', 'Draft', 'Completed', 'Cancelled'] as const;

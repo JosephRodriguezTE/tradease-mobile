@@ -113,7 +113,6 @@ const TRADES = [
   { id: '4', name: 'Handyman',     image: require('../../assets/images/handyman.jpg'),     keywords: ['fix','repair','handyman','odd','install','assemble','mount','hang'] },
   { id: '5', name: 'Roofing',      image: require('../../assets/images/roofing.jpg'),      keywords: ['roof','shingle','gutter','leak','attic','skylight','rain'] },
   { id: '6', name: 'Cleaning',     image: require('../../assets/images/cleaning.jpg'),     keywords: ['clean','maid','tidy','sweep','mop','organize','housekeep','vacuum'] },
-  { id: '7', name: 'Mechanical',   image: require('../../assets/images/mechanical.jpg'),   keywords: ['car','engine','mechanic','vehicle','auto','motor','transmission','brake'] },
   { id: '8', name: 'Painting',     image: require('../../assets/images/painting.png'),     keywords: ['paint','color','wall','ceiling','stain','drywall','primer','brush'] },
   { id: '9', name: 'Carpentry',    image: require('../../assets/images/carpentry.jpg'),    keywords: ['wood','cabinet','frame','door','window','trim','carpent','furniture'] },
   { id: '10', name: 'Landscaping', image: require('../../assets/images/landscaping.jpg'),  keywords: ['lawn','grass','tree','garden','landscape','yard','bush','mow','plant'] },

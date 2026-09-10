@@ -23,7 +23,7 @@ const STORAGE_URL = 'https://linqsojbszglbgpoxgtv.supabase.co/storage/v1/object/
 
 const TRADE_OPTIONS = [
   'HVAC','Electrical','Plumbing','Handyman','Roofing',
-  'Cleaning','Mechanical','Painting','Carpentry','Landscaping',
+  'Cleaning','Painting','Carpentry','Landscaping',
 ];
 
 const PLAN_LIMITS: Record<string, number> = { free: 5, leads: 10, pro: 15 };

@@ -4,7 +4,7 @@ import { getServiceKey } from "../_shared/secretKey.ts";
 
 const TRADE_CATEGORIES = [
   "Electrical", "Plumbing", "HVAC", "Handyman", "Roofing",
-  "Cleaning", "Mechanical", "Painting", "Carpentry", "Landscaping",
+  "Cleaning", "Painting", "Carpentry", "Landscaping",
 ] as const;
 
 type TradeCategory = typeof TRADE_CATEGORIES[number];

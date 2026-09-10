@@ -96,19 +96,6 @@ export const TRADE_JOBS: Record<string, TradeJob[]> = {
     { id: 'smart_home', label: 'Smart Home Device Install', description: 'Install Ring, Nest, smart locks, and similar devices', icon: '📱' },
   ],
 
-  Mechanical: [
-    { id: 'oil_change', label: 'Oil Change', description: 'Full synthetic or conventional oil change at your location', icon: '🛢️' },
-    { id: 'brake_service', label: 'Brake Replacement', description: 'Replace brake pads, rotors, or brake fluid', icon: '🛑' },
-    { id: 'tire_service', label: 'Tire Rotation / Replacement', description: 'Rotate tires or install new ones', icon: '🔄' },
-    { id: 'battery_replace', label: 'Battery Replacement', description: 'Replace dead or weak car battery', icon: '🔋' },
-    { id: 'diagnostics', label: 'Check Engine Diagnostics', description: 'Diagnose check engine light with OBD scanner', icon: '🔍' },
-    { id: 'tune_up', label: 'Engine Tune-Up', description: 'Spark plugs, air filter, fuel filter replacement', icon: '⚙️' },
-    { id: 'ac_recharge', label: 'AC Recharge', description: 'Recharge vehicle air conditioning system', icon: '❄️' },
-    { id: 'coolant_flush', label: 'Coolant Flush', description: 'Flush and replace engine coolant', icon: '💧' },
-    { id: 'pre_purchase', label: 'Pre-Purchase Inspection', description: 'Full inspection before buying a used car', icon: '🔎' },
-    { id: 'mobile_repair', label: 'Mobile Repair (Other)', description: 'Other mobile automotive service at your location', icon: '🚗' },
-  ],
-
   Painting: [
     { id: 'interior_room', label: 'Interior Room Painting', description: 'Paint one or more interior rooms', icon: '🎨' },
     { id: 'exterior', label: 'Exterior House Painting', description: 'Paint the exterior of your home', icon: '🏠' },
@@ -196,13 +183,6 @@ export const PRICE_RANGES: Record<string, PriceRange[]> = {
     { id: 'hm4', label: 'Multi-Day', min: 600, max: 1500, display: '$600 – $1,500' },
     { id: 'hm5', label: 'Get a Quote', min: 0, max: 0, display: 'Requesting Quote' },
   ],
-  Mechanical: [
-    { id: 'm1', label: 'Quick Service', min: 50, max: 150, display: '$50 – $150' },
-    { id: 'm2', label: 'Standard Service', min: 150, max: 400, display: '$150 – $400' },
-    { id: 'm3', label: 'Major Repair', min: 400, max: 1000, display: '$400 – $1,000' },
-    { id: 'm4', label: 'Engine Work', min: 1000, max: 3000, display: '$1,000 – $3,000' },
-    { id: 'm5', label: 'Get a Quote', min: 0, max: 0, display: 'Requesting Quote' },
-  ],
   Painting: [
     { id: 'pt1', label: 'Single Room', min: 200, max: 600, display: '$200 – $600' },
     { id: 'pt2', label: 'Multiple Rooms', min: 600, max: 1500, display: '$600 – $1,500' },
@@ -241,7 +221,6 @@ export const TRADE_ICONS: Record<string, string> = {
   HVAC: '❄️',
   Carpentry: '🪚',
   Handyman: '🔨',
-  Mechanical: '🚗',
   Painting: '🎨',
   Landscaping: '🌿',
   Roofing: '🏠',
@@ -369,12 +348,6 @@ export const TRADE_SPECIALTIES: Record<string, string[]> = {
     'Smoke Detector Installation', 'Smart Home Wiring', 'Generator Installation',
     'Outdoor Lighting', 'Landscape Lighting', 'Security Lighting',
     'Emergency Electrical', 'Commercial Electrical',
-  ],
-  Mechanical: [
-    'Equipment Diagnostic', 'Machine Repair', 'Preventative Maintenance',
-    'System Installation', 'Component Replacement', 'Industrial Equipment Repair',
-    'Pump Repair', 'Compressor Repair', 'Motor Repair', 'Belt & Drive Repair',
-    'Hydraulic System Repair', 'Pneumatic System Repair',
   ],
 };
 

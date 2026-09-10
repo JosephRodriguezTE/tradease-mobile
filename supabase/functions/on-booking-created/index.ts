@@ -5,7 +5,7 @@ import { isValidInternalSecret } from "../_shared/internalSecret.ts";
 
 const TRADE_CATEGORIES = [
   "Electrical", "Plumbing", "HVAC", "Handyman", "Roofing",
-  "Cleaning", "Mechanical", "Painting", "Carpentry", "Landscaping",
+  "Cleaning", "Painting", "Carpentry", "Landscaping",
 ];
 
 Deno.serve(async (req: Request) => {

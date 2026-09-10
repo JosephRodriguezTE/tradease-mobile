@@ -26,7 +26,6 @@ export type TradeId =
   | 'carpentry'
   | 'painting'
   | 'landscaping'
-  | 'mechanical'
   | 'cleaning'
   | 'handyman'
   | 'general';
@@ -114,15 +113,6 @@ export const TRADES: Record<TradeId, Trade> = {
     color: '#4ADE80',
     colorDark: '#15803D',
     aliases: ['landscaping', 'lawn', 'tree', 'sprinkler', 'irrigation', 'grading', 'sod'],
-  },
-  mechanical: {
-    id: 'mechanical',
-    dbValue: 'Mechanical',
-    label: 'Mobile mechanic',
-    code: 'ME',
-    color: '#818CF8',
-    colorDark: '#4338CA',
-    aliases: ['mechanic', 'mechanical', 'auto repair', 'car repair', 'oil change', 'brake', 'tire', 'battery', 'engine'],
   },
   cleaning: {
     id: 'cleaning',
