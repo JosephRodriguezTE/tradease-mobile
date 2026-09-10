@@ -11,6 +11,7 @@ import {
 import * as Sentry from '@sentry/react-native';
 import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Linking from 'expo-linking';
 import { useEffect } from 'react';
 import { Text, TextInput } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -67,10 +68,61 @@ function RootLayout() {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT')        router.replace('/login');
-      if (event === 'PASSWORD_RECOVERY') router.push('/reset-password');
+      if (event === 'SIGNED_OUT') router.replace('/login');
+      // PASSWORD_RECOVERY navigation is handled by the deep-link effect below,
+      // which already knows the outcome (ready vs. invalid vs. switched
+      // account) and passes it as params. A second, param-less push here
+      // would race it and can clobber those params.
     });
     return () => subscription.unsubscribe();
+  }, []);
+
+  // Password recovery deep link: tradease://reset-password?code=...&type=recovery
+  // Supabase's resetPasswordForEmail (flowType: 'pkce') sends this. Nothing
+  // auto-detects it -- detectSessionInUrl is false because RN has no
+  // window.location -- so this is the only thing that turns the tapped link
+  // into a session. exchangeCodeForSession only succeeds on the same device/
+  // app install that originally requested the reset (the PKCE code verifier
+  // it needs is stored locally, never travels in the email) -- see
+  // https://supabase.com/docs/guides/auth/sessions/pkce-flow#limitations.
+  useEffect(() => {
+    async function handleUrl(url: string | null) {
+      if (!url) return;
+      const { queryParams } = Linking.parse(url);
+      if (queryParams?.type !== 'recovery') return;
+
+      const code = Array.isArray(queryParams.code) ? queryParams.code[0] : queryParams.code;
+
+      const { data: prevData } = await supabase.auth.getSession();
+      const prevEmail = prevData.session?.user?.email ?? null;
+
+      if (!code) {
+        router.replace({ pathname: '/reset-password', params: { invalid: '1' } });
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+        if (error || !data.session) {
+          router.replace({ pathname: '/reset-password', params: { invalid: '1' } });
+          return;
+        }
+
+        const newEmail = data.session.user.email ?? '';
+        const params: Record<string, string> =
+          prevEmail && prevEmail !== newEmail
+            ? { switchedFrom: prevEmail, to: newEmail }
+            : {};
+        router.replace({ pathname: '/reset-password', params });
+      } catch {
+        router.replace({ pathname: '/reset-password', params: { invalid: '1' } });
+      }
+    }
+
+    Linking.getInitialURL().then(handleUrl);
+    const sub = Linking.addEventListener('url', ({ url }) => handleUrl(url));
+    return () => sub.remove();
   }, []);
 
   if (!fontsLoaded) return null;

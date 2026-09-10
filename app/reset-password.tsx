@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import { TradeaseLogo } from '../components/TradeaseLogo';
 import {
   ActivityIndicator, Animated, Image,
@@ -49,7 +49,7 @@ const ps = StyleSheet.create({
   label: { fontSize: 11, fontFamily: FontFamily.bold, width: 44, textAlign: 'right' },
 });
 
-function FocusInput({ label, value, onChangeText, placeholder, secureTextEntry, rightElement }: any) {
+function FocusInput({ label, value, onChangeText, placeholder, secureTextEntry, rightElement, editable = true }: any) {
   const glow = useRef(new Animated.Value(0)).current;
   const borderColor = glow.interpolate({
     inputRange: [0, 1],
@@ -59,7 +59,7 @@ function FocusInput({ label, value, onChangeText, placeholder, secureTextEntry, 
   return (
     <View style={s.inputWrap}>
       <Text style={s.inputLabel}>{label}</Text>
-      <Animated.View style={[s.inputBox, { borderColor }]}>
+      <Animated.View style={[s.inputBox, { borderColor }, !editable && s.inputBoxDisabled]}>
         <TextInput
           style={s.input}
           value={value}
@@ -69,6 +69,7 @@ function FocusInput({ label, value, onChangeText, placeholder, secureTextEntry, 
           secureTextEntry={secureTextEntry}
           autoCapitalize="none"
           autoComplete="new-password"
+          editable={editable}
           selectionColor={Colors.orange}
           onFocus={() => Animated.timing(glow, { toValue: 1, duration: 200, useNativeDriver: false }).start()}
           onBlur={() =>  Animated.timing(glow, { toValue: 0, duration: 200, useNativeDriver: false }).start()}
@@ -79,8 +80,16 @@ function FocusInput({ label, value, onChangeText, placeholder, secureTextEntry, 
   );
 }
 
+function firstParam(v?: string | string[]): string | undefined {
+  return Array.isArray(v) ? v[0] : v;
+}
+
 export default function ResetPasswordScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ invalid?: string; switchedFrom?: string; to?: string }>();
+  const invalidParam = firstParam(params.invalid);
+  const switchedFromParam = firstParam(params.switchedFrom);
+  const toParam = firstParam(params.to);
 
   const [password,  setPassword]  = useState('');
   const [confirm,   setConfirm]   = useState('');
@@ -89,6 +98,9 @@ export default function ResetPasswordScreen() {
   const [loading,   setLoading]   = useState(false);
   const [error,     setError]     = useState('');
   const [done,      setDone]      = useState(false);
+  const [status,    setStatus]    = useState<'waiting' | 'ready' | 'invalid'>(
+    invalidParam === '1' ? 'invalid' : 'waiting'
+  );
 
   const fadeAnim   = useRef(new Animated.Value(0)).current;
   const slideAnim  = useRef(new Animated.Value(24)).current;
@@ -101,6 +113,41 @@ export default function ResetPasswordScreen() {
     ]).start();
   });
 
+  // Gate the form behind a real recovery session. The deep-link handler in
+  // _layout.tsx already exchanged the code before routing here; this just
+  // waits for that to land (or for a session that's already there if the
+  // exchange finished before this screen mounted). If neither happens within
+  // a few seconds, the link is treated as dead rather than leaving the form
+  // waiting forever.
+  useEffect(() => {
+    if (invalidParam === '1') return;
+
+    let settled = false;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        settled = true;
+        setStatus('ready');
+      }
+    });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session && !settled) {
+        settled = true;
+        setStatus('ready');
+      }
+    });
+
+    const timeout = setTimeout(() => {
+      if (!settled) setStatus('invalid');
+    }, 8000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
+  }, [invalidParam]);
+
   function validate(): string | null {
     if (password.length < MIN_LENGTH) return `Password must be at least ${MIN_LENGTH} characters.`;
     if (password !== confirm) return 'Passwords do not match.';
@@ -108,6 +155,7 @@ export default function ResetPasswordScreen() {
   }
 
   async function handleReset() {
+    if (status !== 'ready') return;
     const err = validate();
     if (err) { setError(err); return; }
 
@@ -151,7 +199,49 @@ export default function ResetPasswordScreen() {
         >
           <Animated.View style={[s.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
 
-            {!done ? (
+            {status === 'invalid' ? (
+              <>
+                <Animated.View style={[s.successWrap, { transform: [{ scale: checkScale }] }]}>
+                  <LinearGradient
+                    colors={['rgba(239,68,68,0.18)', 'rgba(239,68,68,0.06)']}
+                    style={s.successCircle}
+                  >
+                    <Text style={s.successEmoji}>⚠️</Text>
+                  </LinearGradient>
+                </Animated.View>
+
+                <View style={s.hero}>
+                  <Text style={s.heroTitle}>Link expired{'\n'}or invalid</Text>
+                  <Text style={s.heroSub}>
+                    This reset link is invalid, has already been used, or has expired.
+                    Links only work once, expire after 1 hour, and only work on the
+                    device that requested them.
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={s.submitBtn}
+                  activeOpacity={0.9}
+                  onPress={() => router.replace('/forgot-password')}
+                >
+                  <LinearGradient
+                    colors={['#FF7A1F', '#FF6200']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={s.submitGradient}
+                  >
+                    <Text style={s.submitText}>Request a New Link</Text>
+                    <Text style={s.submitArrow}>→</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={s.secondaryLink} onPress={() => router.replace('/login')}>
+                  <Text style={s.secondaryLinkText}>
+                    Back to <Text style={s.secondaryLinkLink}>Sign In</Text>
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : !done ? (
               <>
                 <View style={s.iconWrap}>
                   <View style={s.iconCircle}>
@@ -166,6 +256,22 @@ export default function ResetPasswordScreen() {
                   </Text>
                 </View>
 
+                {status === 'waiting' && (
+                  <View style={s.waitingBox}>
+                    <ActivityIndicator size="small" color="#F59E0B" />
+                    <Text style={s.waitingText}>Verifying your reset link…</Text>
+                  </View>
+                )}
+
+                {!!switchedFromParam && status === 'ready' && (
+                  <View style={s.switchNotice}>
+                    <Text style={s.switchNoticeText}>
+                      You were signed in as {switchedFromParam}. Continuing to reset
+                      the password for {toParam || 'this account'}.
+                    </Text>
+                  </View>
+                )}
+
                 <View style={s.section}>
                   <FocusInput
                     label="New Password"
@@ -173,6 +279,7 @@ export default function ResetPasswordScreen() {
                     onChangeText={(v: string) => { setPassword(v); setError(''); }}
                     placeholder="At least 8 characters"
                     secureTextEntry={!showPass}
+                    editable={status === 'ready'}
                     rightElement={
                       <TouchableOpacity onPress={() => setShowPass(p => !p)}>
                         <Text style={s.eye}>{showPass ? '🙈' : '👁️'}</Text>
@@ -187,6 +294,7 @@ export default function ResetPasswordScreen() {
                     onChangeText={(v: string) => { setConfirm(v); setError(''); }}
                     placeholder="Repeat your new password"
                     secureTextEntry={!showConf}
+                    editable={status === 'ready'}
                     rightElement={
                       confirm.length > 0 ? (
                         <Text style={{ fontSize: 16 }}>
@@ -226,10 +334,10 @@ export default function ResetPasswordScreen() {
                 </View>
 
                 <TouchableOpacity
-                  style={[s.submitBtn, loading && { opacity: 0.7 }]}
+                  style={[s.submitBtn, (loading || status !== 'ready') && { opacity: 0.7 }]}
                   activeOpacity={0.9}
                   onPress={handleReset}
-                  disabled={loading}
+                  disabled={loading || status !== 'ready'}
                 >
                   <LinearGradient
                     colors={['#FF7A1F', '#FF6200']}
@@ -344,7 +452,27 @@ const s = StyleSheet.create({
   },
   input:      { flex: 1, fontSize: 15, fontFamily: FontFamily.medium, color: '#F0F0F0', paddingVertical: 12 },
   inputRight: { paddingLeft: 10 },
+  inputBoxDisabled: { opacity: 0.5 },
   eye:        { fontSize: 16 },
+
+  waitingBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: 'rgba(251,191,36,0.08)', borderRadius: 12,
+    borderWidth: 1, borderColor: 'rgba(251,191,36,0.22)',
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  waitingText: { fontSize: 13, fontFamily: FontFamily.medium, color: '#F59E0B', lineHeight: 19 },
+
+  switchNotice: {
+    backgroundColor: 'rgba(56,189,248,0.08)', borderRadius: 12,
+    borderWidth: 1, borderColor: 'rgba(56,189,248,0.22)',
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  switchNoticeText: { fontSize: 13, fontFamily: FontFamily.medium, color: '#38BDF8', lineHeight: 19 },
+
+  secondaryLink:     { alignItems: 'center', paddingVertical: 4 },
+  secondaryLinkText: { fontSize: 14, fontFamily: FontFamily.medium, color: '#777' },
+  secondaryLinkLink: { color: Colors.orange, fontFamily: FontFamily.bold },
 
   errorBox: {
     backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: 12,
