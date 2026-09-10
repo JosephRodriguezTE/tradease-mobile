@@ -1,6 +1,7 @@
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { ALL_TRADES } from '@/lib/tradeJobs';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -10,12 +11,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Font, Radius } from '../../constants/theme';
-
-const TRADES = [
-  'Plumbing', 'Electrical', 'HVAC', 'Carpentry', 'Roofing',
-  'Painting', 'Landscaping', 'General Contracting', 'Masonry',
-  'Flooring', 'Drywall', 'Handyman',
-];
 
 const US_STATES = [
   'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN',
@@ -141,7 +136,7 @@ export default function CompanySetupScreen() {
 
             <Text style={s.label}>Primary Trade *</Text>
             <View style={s.tradeGrid}>
-              {TRADES.map((t) => (
+              {ALL_TRADES.map((t) => (
                 <TouchableOpacity
                   key={t}
                   style={[s.tradePill, trade === t && { backgroundColor: C.orange + '22', borderColor: C.orange }]}
