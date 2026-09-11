@@ -227,12 +227,30 @@ export default function JobDetailScreen() {
   useEffect(() => {
     if (!id) return;
     async function loadData() {
-      const { data: bookingData } = await supabase
+      const { data: fullBooking } = await supabase
         .from('bookings')
         .select(`*, contractor:contractor_id (id, company_name, trade_type, avatar_url, rating, phone, tagline, description, username, plan, verification_status, verified, insured, license_verified, specializations, is_available, total_bookings, review_count, location)`)
         .eq('id', id)
         .maybeSingle();
-      setBooking(bookingData ?? null);
+
+      let bookingData: any = fullBooking ?? null;
+
+      // RLS grants SELECT on bookings only to the customer or the
+      // assigned contractor (verified live against the actual policy: a
+      // non-assigned, non-admin contractor gets zero rows here for a
+      // pending, unclaimed job). A browsing contractor who hasn't claimed
+      // this job yet gets nothing back above -- fall back to the same
+      // restricted, fuzzed view the map already uses. isPublicView marks
+      // that fallback so the render below knows not to expect fields
+      // this path never carries (exact address, customer identity,
+      // photos, scheduling).
+      if (!bookingData && isContractor) {
+        const { data: publicRows } = await supabase.rpc('public_job_by_id', { job_id: id });
+        const publicJob = publicRows?.[0] ?? null;
+        if (publicJob) bookingData = { ...publicJob, isPublicView: true };
+      }
+
+      setBooking(bookingData);
       setBeforePhotos(bookingData?.before_photos ?? []);
       setAfterPhotos(bookingData?.after_photos ?? []);
 
@@ -249,7 +267,7 @@ export default function JobDetailScreen() {
       setLoading(false);
     }
     loadData();
-  }, [id]);
+  }, [id, isContractor]);
 
   // Realtime offer updates
   useEffect(() => {
@@ -390,7 +408,7 @@ export default function JobDetailScreen() {
       return;
     }
     setOfferSaving(true);
-    const { error } = await supabase.rpc('accept_job', {
+    const { data: acceptedBooking, error } = await supabase.rpc('accept_job', {
       p_booking_id: id as string,
       p_contractor_id: user.id,
       p_contractor_name: myContractor?.company_name || '',
@@ -404,19 +422,34 @@ export default function JobDetailScreen() {
       }
       return;
     }
-    supabase.from('messages').insert({
-      chat_id:      deriveChatId(booking.customer_id, user.id),
-      sender_id:    user.id,
-      recipient_id: booking.customer_id,
-      sender_name:  'Tradease',
-      body:         `⚡ ${booking.trade ?? 'Job'} booked instantly — your contractor is confirmed and ready to begin.`,
-      read:         false,
-      is_system:    true,
-      sender_role:  'contractor',
-    }).then(() => {}, (err: unknown) => console.warn('[job] system message insert failed:', err));
+    // booking.customer_id isn't available on the public (isPublicView)
+    // path -- accept_job returns the full, now-assigned booking row,
+    // which has it, whichever path we arrived from.
+    const customerId = (acceptedBooking as any)?.customer_id ?? booking.customer_id;
+    if (customerId) {
+      supabase.from('messages').insert({
+        chat_id:      deriveChatId(customerId, user.id),
+        sender_id:    user.id,
+        recipient_id: customerId,
+        sender_name:  'Tradease',
+        body:         `⚡ ${booking.trade ?? 'Job'} booked instantly — your contractor is confirmed and ready to begin.`,
+        read:         false,
+        is_system:    true,
+        sender_role:  'contractor',
+      }).then(() => {}, (err: unknown) => console.warn('[job] system message insert failed:', err));
+    }
     setOfferSaving(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setBooking((p: any) => ({ ...p, status: 'confirmed', contractor_id: user.id }));
+    // Merge in the real booking accept_job just returned -- on the public
+    // path this is the moment the restricted/fuzzed view should give way
+    // to full access, since RLS now grants it (contractor_id = auth.uid()).
+    setBooking((p: any) => ({
+      ...p,
+      ...(acceptedBooking ?? {}),
+      status: 'confirmed',
+      contractor_id: user.id,
+      isPublicView: false,
+    }));
   }
 
   const CANCELABLE = ['pending', 'accepted', 'confirmed', 'in_progress'];
@@ -609,6 +642,14 @@ export default function JobDetailScreen() {
   const chatId = booking.contractor_id && booking.customer_id
     ? deriveChatId(booking.customer_id, booking.contractor_id)
     : null;
+  // Same approximate-location line the map card uses (app/(tabs)/map.tsx) --
+  // town plus nearest major road when both are known, town alone otherwise,
+  // 'Nearby' when the job has neither. Only meaningful on the public
+  // (isPublicView) path; notes carries the customer's own typed address
+  // text on the normal path and is shown as-is there instead.
+  const areaLabel = booking.town
+    ? (booking.nearest_major_road ? `${booking.town} — near ${booking.nearest_major_road}` : booking.town)
+    : 'Nearby';
 
   return (
     <View style={s.container}>
@@ -641,11 +682,13 @@ export default function JobDetailScreen() {
 
         {/* Info grid */}
         <View style={s.infoGrid}>
-          {!!booking.notes && (
+          {(booking.isPublicView || !!booking.notes) && (
             <View style={[s.infoCard, { backgroundColor: C.surface, borderColor: C.border }]}>
               <Ionicons name="location-outline" size={20} color={C.orange} />
               <Text style={[s.infoLabel, { color: C.textMuted }]}>LOCATION</Text>
-              <Text style={[s.infoValue, { color: C.textPrimary }]} numberOfLines={2}>{booking.notes}</Text>
+              <Text style={[s.infoValue, { color: C.textPrimary }]} numberOfLines={2}>
+                {booking.isPublicView ? areaLabel : booking.notes}
+              </Text>
             </View>
           )}
           {!!booking.price_estimate && (

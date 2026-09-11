@@ -33,8 +33,12 @@ interface Job {
   job_lat: number | null;
   job_lng: number | null;
   job_address: string | null;
-  customer_name: string;
-  customer_id: string;
+  // Not available for an unclaimed job seen through public_jobs_nearby() --
+  // no customer identity until the job is claimed. Still present (and
+  // still required) on activeJobs, which comes from a direct bookings
+  // query the contractor's own RLS ownership already covers.
+  customer_name?: string;
+  customer_id?: string;
   customer_rating: number | null;
   created_at: string;
   distance_miles?: number;
@@ -654,46 +658,59 @@ export default function ContractorHomeScreen() {
     }
 
     // Open jobs — unassigned, pending, matching this contractor's trade,
-    // within 30 miles, request/post window not expired
-    const nowIso = new Date().toISOString();
-    let openJobsQuery = supabase
-      .from('bookings')
-      .select('id,trade,description,urgency,price_estimate,payout_max,job_lat,job_lng,job_address,customer_name,customer_id,customer_rating,created_at,is_instant_book,instant_book_price,request_expires_at')
-      .is('contractor_id', null)
-      .eq('status', 'pending')
-      .or(`request_expires_at.gt.${nowIso},request_expires_at.is.null`)
-      .order('created_at', { ascending: false })
-      .limit(50);
-    if (c?.trade_type) openJobsQuery = openJobsQuery.eq('trade', c.trade_type);
-    const { data: rawJobs } = await openJobsQuery;
+    // within 30 miles, request/post window not expired.
+    //
+    // Routed through public_jobs_nearby(), not a direct bookings query.
+    // Verified live against RLS: a contractor who isn't the assigned
+    // contractor gets zero rows querying bookings directly for a pending,
+    // unclaimed job -- bookings_owner_or_assigned_contractor_select only
+    // grants auth.uid() = customer_id OR auth.uid() = contractor_id, and
+    // contractor_id is null pre-claim, so neither ever matches a browsing
+    // contractor. This RPC (SECURITY DEFINER) is the only path that
+    // returns these rows to them; it fuzzes the coordinates and omits
+    // customer identity until the job is claimed.
+    //
+    // No lat/lng on file means no meaningful "nearby" result -- skip the
+    // call rather than pass nulls into the RPC's distance filter, which
+    // would just silently return nothing.
+    const { data: rawJobs } = c?.lat && c?.lng
+      ? await supabase.rpc('public_jobs_nearby', {
+          user_lat: c.lat,
+          user_lng: c.lng,
+          max_miles: 30,
+          trade_filter: c?.trade_type ?? null,
+        })
+      : { data: [] as any[] };
 
-    if (rawJobs && c?.lat && c?.lng) {
-      const withDist = rawJobs
-        .map(j => ({
-          ...j,
-          distance_miles: j.job_lat && j.job_lng
-            ? haversine(c.lat, c.lng, j.job_lat, j.job_lng)
-            : 99,
-        }))
-        .filter(j => j.distance_miles <= 30)
-        .sort((a, b) => a.distance_miles - b.distance_miles);
-      setJobs(withDist);
-    } else {
-      setJobs(rawJobs ?? []);
-    }
+    const withDist = (rawJobs ?? []).map((j: any) => ({
+      ...j,
+      distance_miles: c?.lat && c?.lng && j.fuzzed_lat && j.fuzzed_lng
+        ? haversine(c.lat, c.lng, j.fuzzed_lat, j.fuzzed_lng)
+        : undefined,
+    }));
+    setJobs(withDist);
 
-    // Missed money — jobs that came in while offline yesterday, still actually claimable
-    const { count: missedCount, data: missedData } = await supabase
-      .from('bookings')
-      .select('price_estimate', { count: 'exact' })
-      .is('contractor_id', null)
-      .eq('status', 'pending')
-      .or(`request_expires_at.gt.${nowIso},request_expires_at.is.null`)
-      .gte('created_at', new Date(Date.now() - 86400000).toISOString());
+    // Missed money — jobs that came in while offline yesterday, still
+    // actually claimable. Same RPC, not trade-filtered (matches the old
+    // direct query: any trade counts toward "missed"), but now capped to
+    // the same 30-mile radius as the main feed above -- the old query had
+    // no distance bound at all, which didn't match anything a contractor
+    // could realistically have taken anyway.
+    const { data: missedRaw } = c?.lat && c?.lng
+      ? await supabase.rpc('public_jobs_nearby', {
+          user_lat: c.lat,
+          user_lng: c.lng,
+          max_miles: 30,
+          trade_filter: null,
+        })
+      : { data: [] as any[] };
 
-    if (missedCount && missedCount > 0 && !c?.is_available) {
-      const totalVal = (missedData ?? []).reduce((s, j) => s + (j.price_estimate ?? 0), 0);
-      setMissedJobs({ count: missedCount, value: totalVal });
+    const yesterdayIso = new Date(Date.now() - 86400000).toISOString();
+    const missedRecent = (missedRaw ?? []).filter((j: any) => j.created_at >= yesterdayIso);
+
+    if (missedRecent.length > 0 && !c?.is_available) {
+      const totalVal = missedRecent.reduce((s: number, j: any) => s + (j.price_estimate ?? 0), 0);
+      setMissedJobs({ count: missedRecent.length, value: totalVal });
     } else {
       setMissedJobs(null);
     }
@@ -743,6 +760,17 @@ export default function ContractorHomeScreen() {
   useEffect(() => { contractorRef.current = contractor; }, [contractor]);
 
   // ── Realtime — new jobs ping instantly ───────────────────────────────────────
+  // KNOWN GAP, not fixed here: Supabase Realtime enforces the same RLS as a
+  // direct SELECT, so this postgres_changes subscription on bookings never
+  // receives an INSERT event for a job this contractor isn't allowed to
+  // SELECT -- i.e. never, for a genuinely new unclaimed job, same root
+  // cause as the direct-query bug above. Unlike a REST query this can't be
+  // pointed at a SECURITY DEFINER RPC instead; Realtime only watches real
+  // tables. The instant same-session ping for leads/pro plans is therefore
+  // silently inert for this exact case -- push notifications (a separate,
+  // working system) are the only thing that currently tells a browsing
+  // contractor a new job exists. Left alone pending a real design (e.g. a
+  // broadcast channel a trigger publishes fuzzed job data into).
   useEffect(() => {
     const ch = supabase
       .channel(`jobs_feed_${Math.random().toString(36).slice(2, 9)}`)
@@ -940,7 +968,7 @@ export default function ContractorHomeScreen() {
       ]);
       return;
     }
-    const { error } = await supabase.rpc('accept_job', {
+    const { data: acceptedBooking, error } = await supabase.rpc('accept_job', {
       p_booking_id: job.id,
       p_contractor_id: contractor.id,
       p_contractor_name: contractor.company_name ?? '',
@@ -953,16 +981,22 @@ export default function ContractorHomeScreen() {
       }
       return;
     }
-    supabase.from('messages').insert({
-      chat_id:      deriveChatId(job.customer_id, contractor.id),
-      sender_id:    contractor.id,
-      recipient_id: job.customer_id,
-      sender_name:  'Tradease',
-      body:         `⚡ ${job.trade ?? 'Job'} booked instantly — your contractor is confirmed and ready to begin.`,
-      read:         false,
-      is_system:    true,
-      sender_role:  'contractor',
-    }).then(() => {}, (err: unknown) => console.warn('[contractor-home] system message insert failed:', err));
+    // job.customer_id isn't available from the public feed (fuzzed, no
+    // customer identity pre-claim) -- accept_job returns the full,
+    // now-assigned booking row, which has it.
+    const customerId = (acceptedBooking as any)?.customer_id;
+    if (customerId) {
+      supabase.from('messages').insert({
+        chat_id:      deriveChatId(customerId, contractor.id),
+        sender_id:    contractor.id,
+        recipient_id: customerId,
+        sender_name:  'Tradease',
+        body:         `⚡ ${job.trade ?? 'Job'} booked instantly — your contractor is confirmed and ready to begin.`,
+        read:         false,
+        is_system:    true,
+        sender_role:  'contractor',
+      }).then(() => {}, (err: unknown) => console.warn('[contractor-home] system message insert failed:', err));
+    }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     router.push(`/work-order/contractor?booking_id=${job.id}` as any);
   }
