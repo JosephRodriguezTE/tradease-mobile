@@ -28,6 +28,13 @@ Sentry.init({
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
+// Module-level, not a ref: must survive independently of how many times the
+// deep-link effect below runs, and must be visible to both handleUrl
+// invocations (getInitialURL + the 'url' event) regardless of which one the
+// effect closure captured. PKCE codes are single-use and short-lived, so
+// this only ever needs to hold a couple of entries at a time.
+const handledCodes = new Set<string>();
+
 function applyDefaultFont() {
   const TextAny = Text as any;
   TextAny.defaultProps = TextAny.defaultProps ?? {};
@@ -85,29 +92,61 @@ function RootLayout() {
   // app install that originally requested the reset (the PKCE code verifier
   // it needs is stored locally, never travels in the email) -- see
   // https://supabase.com/docs/guides/auth/sessions/pkce-flow#limitations.
+  //
+  // On a cold start, Linking.getInitialURL() and the very first
+  // Linking.addEventListener('url', ...) callback both deliver the SAME
+  // launch URL -- a known RN/Android Linking behavior, not a StrictMode or
+  // effect-remount artifact (this app doesn't use StrictMode anywhere, and
+  // this is a production build besides, where React doesn't double-invoke
+  // effects regardless). Without a guard, both calls raced to exchange the
+  // identical one-time-use PKCE code: whichever reached Supabase first
+  // actually got a session, the other got a real failure back, and
+  // whichever call's router.replace happened to resolve LAST won the
+  // screen -- which was consistently the failing one, so the user always
+  // saw "invalid" even on a run where the exchange genuinely succeeded.
+  // handledCodes is module-level (not a ref) so it survives regardless of
+  // how many times this effect itself runs, and the check-and-claim below
+  // happens synchronously, before any await, so the second invocation
+  // -- whichever call that turns out to be -- always sees the code already
+  // claimed and bails before ever touching the network.
   useEffect(() => {
-    async function handleUrl(url: string | null) {
+    async function handleUrl(url: string | null, source: 'getInitialURL' | 'urlEvent') {
       if (!url) return;
       const { queryParams } = Linking.parse(url);
+      console.log(`[password-recovery] ${source}: received url, type=${queryParams?.type ?? 'none'}`);
       if (queryParams?.type !== 'recovery') return;
 
       const code = Array.isArray(queryParams.code) ? queryParams.code[0] : queryParams.code;
 
-      const { data: prevData } = await supabase.auth.getSession();
-      const prevEmail = prevData.session?.user?.email ?? null;
-
       if (!code) {
+        console.log(`[password-recovery] ${source}: recovery link has no code param`);
         router.replace({ pathname: '/reset-password', params: { invalid: '1' } });
         return;
       }
+
+      const shortCode = code.slice(0, 8);
+
+      // Synchronous claim -- must happen before the first await below.
+      if (handledCodes.has(code)) {
+        console.log(`[password-recovery] ${source}: code ${shortCode}... already handled, skipping`);
+        return;
+      }
+      handledCodes.add(code);
+      console.log(`[password-recovery] ${source}: claimed code ${shortCode}..., starting exchange`);
+
+      const { data: prevData } = await supabase.auth.getSession();
+      const prevEmail = prevData.session?.user?.email ?? null;
 
       try {
         const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
         if (error || !data.session) {
+          console.log(`[password-recovery] ${source}: exchange FAILED for ${shortCode}... -- ${error?.message ?? 'no session returned'}`);
           router.replace({ pathname: '/reset-password', params: { invalid: '1' } });
           return;
         }
+
+        console.log(`[password-recovery] ${source}: exchange SUCCEEDED for ${shortCode}..., user=${data.session.user.email}`);
 
         const newEmail = data.session.user.email ?? '';
         const params: Record<string, string> =
@@ -115,13 +154,14 @@ function RootLayout() {
             ? { switchedFrom: prevEmail, to: newEmail }
             : {};
         router.replace({ pathname: '/reset-password', params });
-      } catch {
+      } catch (err: any) {
+        console.log(`[password-recovery] ${source}: exchange THREW for ${shortCode}... -- ${err?.message ?? String(err)}`);
         router.replace({ pathname: '/reset-password', params: { invalid: '1' } });
       }
     }
 
-    Linking.getInitialURL().then(handleUrl);
-    const sub = Linking.addEventListener('url', ({ url }) => handleUrl(url));
+    Linking.getInitialURL().then((url) => handleUrl(url, 'getInitialURL'));
+    const sub = Linking.addEventListener('url', ({ url }) => handleUrl(url, 'urlEvent'));
     return () => sub.remove();
   }, []);
 
