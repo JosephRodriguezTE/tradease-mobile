@@ -28,7 +28,7 @@ const STATUS_CONFIG = {
     color:   '#FBBF24',
     bg:      'rgba(251,191,36,0.1)',
     title:   'Under Review',
-    message: 'Your application is being reviewed by our team. This typically takes less than 24 hours. We\'ll notify you when it\'s approved.',
+    message: 'Your application is being reviewed by our team. This typically takes less than 72 hours. We\'ll notify you when it\'s approved.',
   },
   approved: {
     icon:    'shield-checkmark',

@@ -536,7 +536,7 @@ export default function GetVerifiedScreen() {
             Under Review
           </Text>
           <Text style={{ fontSize: TY.base, color: C.textSecondary, textAlign: 'center', lineHeight: 26, marginBottom: SP[8] }}>
-            Your application is being reviewed by the Tradease team. We'll notify you within 24 hours once approved.
+            Your application is being reviewed by the Tradease team. We&apos;ll notify you within 72 hours once approved.
           </Text>
           <TouchableOpacity
             style={{ backgroundColor: C.orange, borderRadius: Radius.lg, paddingVertical: SP[4], paddingHorizontal: SP[8] }}

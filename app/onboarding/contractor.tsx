@@ -574,7 +574,7 @@ export default function ContractorOnboarding() {
 
             <Text style={S.footerNote}>
               Complete all sections above to unlock this button.{'\n'}
-              Verification review takes up to 24 hours — you'll be notified when approved.
+              Verification review takes up to 72 hours — you'll be notified when approved.
             </Text>
           </View>
 

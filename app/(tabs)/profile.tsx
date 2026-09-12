@@ -321,7 +321,7 @@ function VerificationBanner({ status, router }: { status: string | undefined; ro
         activeOpacity={0.8}
       >
         <Text style={[styles.verifyBannerText, styles.verifyBannerTextYellow]}>
-          ⏳ Under Review · Usually 24 hours
+          ⏳ Under Review · Usually 72 hours
         </Text>
         <Ionicons name="chevron-forward" size={16} color="#FBBF24" />
       </TouchableOpacity>
