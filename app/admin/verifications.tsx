@@ -28,12 +28,23 @@ interface VerificationRow {
   id_doc_path: string | null;
   years_in_business: number | null;
   submitted_at: string | null;
+  updated_at: string | null;
   contractor: {
     company_name: string | null;
     trade_type: string | null;
     phone: string | null;
     avatar_url: string | null;
   } | null;
+}
+
+// updated_at is bumped on every save, including a mid-review edit -- but
+// it also gets set once at submission time itself, so a few seconds'
+// natural drift between submitted_at and updated_at shouldn't read as
+// "edited." A full minute of gap means the contractor came back after
+// the fact, which is what an admin mid-review actually needs to know.
+function wasEditedSinceSubmit(row: VerificationRow): boolean {
+  if (!row.updated_at || !row.submitted_at) return false;
+  return new Date(row.updated_at).getTime() - new Date(row.submitted_at).getTime() > 60_000;
 }
 
 export default function AdminVerificationsScreen() {
@@ -54,7 +65,7 @@ export default function AdminVerificationsScreen() {
     setLoading(true);
     const { data } = await supabase
       .from('contractor_verification')
-      .select('id, contractor_id, status, license_number, license_state, license_doc_path, insurance_provider, insurance_expiry, insurance_doc_path, id_doc_path, years_in_business, submitted_at, contractor:contractors(company_name, trade_type, phone, avatar_url)')
+      .select('id, contractor_id, status, license_number, license_state, license_doc_path, insurance_provider, insurance_expiry, insurance_doc_path, id_doc_path, years_in_business, submitted_at, updated_at, contractor:contractors(company_name, trade_type, phone, avatar_url)')
       .eq('status', 'pending_review')
       .order('submitted_at', { ascending: true });
     setRows((data as any[]) ?? []);
@@ -170,7 +181,15 @@ export default function AdminVerificationsScreen() {
                   <InfoRow C={C} label="License" value={row.license_number ? `${row.license_number} (${row.license_state ?? '—'})` : '—'} />
                   <InfoRow C={C} label="Insurance" value={row.insurance_provider ? `${row.insurance_provider} · exp. ${row.insurance_expiry ?? '—'}` : '—'} />
                   <InfoRow C={C} label="Experience" value={row.years_in_business != null ? `${row.years_in_business} yrs` : '—'} />
-                  <InfoRow C={C} label="Submitted" value={row.submitted_at ? new Date(row.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'} last />
+                  <InfoRow C={C} label="Submitted" value={row.submitted_at ? new Date(row.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'} last={!wasEditedSinceSubmit(row)} />
+                  {wasEditedSinceSubmit(row) && (
+                    <InfoRow
+                      C={C}
+                      label="⚠ Edited"
+                      value={`${new Date(row.updated_at!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${new Date(row.updated_at!).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}
+                      last
+                    />
+                  )}
                 </View>
 
                 <View style={{ flexDirection: 'row', gap: SP[2], marginTop: SP[3] }}>
