@@ -4,6 +4,7 @@
 // Employee-aware: employees see employer's job feed and company stats
 
 import { useTheme } from '@/context/ThemeContext';
+import VerificationGate from '@/components/VerificationGate';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole, EmployeeRecord } from '@/hooks/useRole';
 import { supabase } from '@/lib/supabase';
@@ -624,6 +625,10 @@ export default function ContractorHomeScreen() {
   const [togglingOnline, setTogglingOnline] = useState(false);
   const [missedJobs, setMissedJobs] = useState<{ count: number; value: number } | null>(null);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  // Shown in place of a bare Alert wherever a verification-gated action
+  // (accept, go online) gets blocked -- one modal, reused, instead of the
+  // three separate raw alerts this replaced.
+  const [verifyGateOpen, setVerifyGateOpen] = useState(false);
   const channelRef    = useRef<any>(null);
   const contractorRef = useRef<any>(null);
 
@@ -640,7 +645,7 @@ export default function ContractorHomeScreen() {
     // Contractor profile
     const { data: c } = await supabase
       .from('contractors')
-      .select('id,company_name,username,is_available,lat,lng,rating,push_token,trade_type,verification_status,plan')
+      .select('id,company_name,username,is_available,lat,lng,rating,push_token,trade_type,verification_status,verification_rejection_reason,plan')
       .eq('id', contractorId)
       .single();
     setContractor(c);
@@ -883,10 +888,7 @@ export default function ContractorHomeScreen() {
   async function respondToCounter(offerId: string, bookingId: string, counterPrice: number, accept: boolean, scheduledAt?: string | null) {
     if (accept) {
       if (contractor?.verification_status !== 'approved') {
-        Alert.alert('Verification Required', 'Complete verification before accepting jobs.', [
-          { text: 'Later', style: 'cancel' },
-          { text: 'Get Verified', onPress: () => router.push('/profile/get-verified' as any) },
-        ]);
+        setVerifyGateOpen(true);
         return;
       }
       const { error } = await supabase.rpc('contractor_respond_counter', {
@@ -922,10 +924,7 @@ export default function ContractorHomeScreen() {
     // update outright), this just gives a real message instead of the
     // raw DB error for the common case of stale/never-approved status.
     if (next && contractor.verification_status !== 'approved') {
-      Alert.alert('Verification Required', 'Complete verification before going online.', [
-        { text: 'Later', style: 'cancel' },
-        { text: 'Get Verified', onPress: () => router.push('/profile/get-verified' as any) },
-      ]);
+      setVerifyGateOpen(true);
       return;
     }
     setTogglingOnline(true);
@@ -980,10 +979,7 @@ export default function ContractorHomeScreen() {
   async function handleAcceptInstantBook(job: Job) {
     if (!contractor) return;
     if (contractor.verification_status !== 'approved') {
-      Alert.alert('Verification Required', 'Complete verification before accepting jobs.', [
-        { text: 'Later', style: 'cancel' },
-        { text: 'Get Verified', onPress: () => router.push('/profile/get-verified' as any) },
-      ]);
+      setVerifyGateOpen(true);
       return;
     }
     const { data: acceptedBooking, error } = await supabase.rpc('accept_job', {
@@ -1295,6 +1291,18 @@ export default function ContractorHomeScreen() {
           setQuoteTarget(null);
           load(true);
         }}
+      />
+
+      <VerificationGate
+        visible={verifyGateOpen}
+        onClose={() => setVerifyGateOpen(false)}
+        status={
+          contractor?.verification_status === 'pending_review' ? 'pending_review'
+            : contractor?.verification_status === 'rejected'    ? 'rejected'
+            :                                                      'not_submitted'
+        }
+        companyName={contractor?.company_name}
+        rejectionReason={contractor?.verification_rejection_reason}
       />
     </SafeAreaView>
   );

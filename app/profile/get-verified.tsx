@@ -128,9 +128,14 @@ function UploadField({
             <Text style={{ fontSize: TY.sm, fontWeight: Font.bold, color: '#22C55E' }}>✓ Document selected</Text>
             <Text style={{ fontSize: TY.xs, color: C.textMuted, marginTop: 2 }} numberOfLines={1}>{fileName}</Text>
           </View>
-          <TouchableOpacity onPress={onPickImage} style={{ padding: SP[2] }}>
-            <Ionicons name="pencil-outline" size={16} color={C.textMuted} />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row' }}>
+            <TouchableOpacity onPress={onPickImage} style={{ padding: SP[2] }}>
+              <Ionicons name="camera-outline" size={16} color={C.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onPickDoc} style={{ padding: SP[2] }}>
+              <Ionicons name="document-outline" size={16} color={C.textMuted} />
+            </TouchableOpacity>
+          </View>
         </View>
       ) : (
         <View style={{ gap: SP[2] }}>
@@ -181,12 +186,29 @@ function Field({ label, value, onChangeText, placeholder, keyboardType = 'defaul
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
+// Sentinel meaning "keep the document already on file" -- distinct from a
+// real uri (never starts with file:/ph:/content:), so UploadField falls
+// into its document-icon branch and canProceed()'s truthy check still
+// passes without needing a fresh pick. Cleared the moment the user taps
+// through and picks a real replacement.
+const KEPT_DOC = 'kept-existing-document';
+
 export default function GetVerifiedScreen() {
   const router = useRouter();
   const { colors: C } = useTheme();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [contractorId, setContractorId] = useState('');
+
+  // Existing-application state -- loaded before the form is shown, so a
+  // pending or rejected contractor edits/resubmits instead of starting a
+  // second, unrelated-looking application from a blank form.
+  const [loadingExisting,   setLoadingExisting]   = useState(true);
+  const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
+  const [rejectionReason,    setRejectionReason]    = useState<string | null>(null);
+  const [existingLicenseDocPath, setExistingLicenseDocPath] = useState<string | null>(null);
+  const [existingInsDocPath,     setExistingInsDocPath]     = useState<string | null>(null);
+  const [existingIdDocPath,      setExistingIdDocPath]      = useState<string | null>(null);
 
   // Step 1 — Business Info
   const [businessName,     setBusinessName]     = useState('');
@@ -218,22 +240,68 @@ export default function GetVerifiedScreen() {
   const [govIdMime, setGovIdMime] = useState('image/jpeg');
   const [govIdB64,  setGovIdB64]  = useState<string | null>(null);
 
-  // Pre-fill from contractor profile
+  // Pre-fill from contractor profile, and -- the point of this whole
+  // effect -- load any existing contractor_verification row so a pending
+  // or rejected contractor edits/resubmits instead of retyping and
+  // re-uploading everything from a blank form. verification_status is
+  // checked here too: an approved contractor never sees the form at all
+  // (rendered below), since submitting again would silently reset them
+  // to pending_review.
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) { setLoadingExisting(false); return; }
       setContractorId(user.id);
-      const { data } = await supabase
-        .from('contractors')
-        .select('company_name, trade_type, years_in_business')
-        .eq('id', user.id)
-        .single();
-      if (data) {
-        setBusinessName(data.company_name ?? '');
-        setPrimaryTrade(data.trade_type ?? '');
-        setYearsInBusiness(data.years_in_business ? String(data.years_in_business) : '');
+
+      const [{ data: contractor }, { data: verification }] = await Promise.all([
+        supabase
+          .from('contractors')
+          .select('company_name, trade_type, years_in_business, verification_status, verification_rejection_reason')
+          .eq('id', user.id)
+          .single(),
+        supabase
+          .from('contractor_verification')
+          .select('license_number, license_state, license_doc_path, insurance_provider, insurance_expiry, insurance_doc_path, id_doc_path, years_in_business')
+          .eq('contractor_id', user.id)
+          .maybeSingle(),
+      ]);
+
+      if (contractor) {
+        setBusinessName(contractor.company_name ?? '');
+        setPrimaryTrade(contractor.trade_type ?? '');
+        setVerificationStatus(contractor.verification_status ?? null);
+        setRejectionReason(contractor.verification_rejection_reason ?? null);
+        setYearsInBusiness(contractor.years_in_business ? String(contractor.years_in_business) : '');
       }
+
+      if (verification) {
+        if (verification.years_in_business) setYearsInBusiness(String(verification.years_in_business));
+        setLicenseNumber(verification.license_number ?? '');
+        setLicenseState(verification.license_state ?? '');
+        setInsuranceProvider(verification.insurance_provider ?? '');
+        if (verification.insurance_expiry) {
+          const d = new Date(verification.insurance_expiry);
+          setExpiryMonth(d.getMonth() + 1);
+          setExpiryYear(d.getFullYear());
+        }
+        if (verification.license_doc_path) {
+          setExistingLicenseDocPath(verification.license_doc_path);
+          setLicenseDocUri(KEPT_DOC);
+          setLicenseDocName('Current document on file');
+        }
+        if (verification.insurance_doc_path) {
+          setExistingInsDocPath(verification.insurance_doc_path);
+          setInsDocUri(KEPT_DOC);
+          setInsDocName('Current document on file');
+        }
+        if (verification.id_doc_path) {
+          setExistingIdDocPath(verification.id_doc_path);
+          setGovIdUri(KEPT_DOC);
+          setGovIdName('Current document on file');
+        }
+      }
+
+      setLoadingExisting(false);
     }
     load();
   }, []);
@@ -321,18 +389,37 @@ export default function GetVerifiedScreen() {
     }
   }
 
+  // Reuses the document already on file when the user hasn't picked a
+  // replacement (uri is still the KEPT_DOC sentinel) -- redoing all four
+  // steps because one document was wrong is exactly what this avoids.
+  async function resolveDoc(
+    uri: string, mime: string, storagePath: string, base64: string | null, existingPath: string | null
+  ): Promise<UploadResult> {
+    if (uri === KEPT_DOC) {
+      return existingPath
+        ? { ok: true, path: existingPath }
+        : { ok: false, error: 'No document on file' };
+    }
+    return uploadFile(uri, mime, storagePath, base64);
+  }
+
   // ── Submit ────────────────────────────────────────────────────────────────────
 
   async function handleSubmit() {
+    // Defensive: nothing currently routes an approved contractor to this
+    // screen (see the render below), but resubmitting would silently
+    // reset them to pending_review if something ever did.
+    if (verificationStatus === 'approved') return;
+
     setSubmitting(true);
     try {
       const uid = contractorId;
       if (!uid) throw new Error('Not logged in');
 
       const [licRes, insRes, idRes] = await Promise.all([
-        uploadFile(licenseDocUri,  licenseDocMime, `verification/${uid}/license`,   licenseDocB64),
-        uploadFile(insDocUri,      insDocMime,     `verification/${uid}/insurance`, insDocB64),
-        uploadFile(govIdUri,       govIdMime,      `verification/${uid}/id`,        govIdB64),
+        resolveDoc(licenseDocUri, licenseDocMime, `verification/${uid}/license`,   licenseDocB64, existingLicenseDocPath),
+        resolveDoc(insDocUri,     insDocMime,     `verification/${uid}/insurance`, insDocB64,     existingInsDocPath),
+        resolveDoc(govIdUri,      govIdMime,      `verification/${uid}/id`,        govIdB64,      existingIdDocPath),
       ]);
 
       const failed = [
@@ -396,6 +483,46 @@ export default function GetVerifiedScreen() {
     );
   }
 
+  // ── Loading existing application ────────────────────────────────────────────
+
+  if (loadingExisting) {
+    return (
+      <SafeAreaView style={[st.container, { backgroundColor: C.background }]} edges={['top']}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={C.orange} size="large" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Already verified — block entirely ───────────────────────────────────────
+  // The priority fix: nothing should let an approved contractor land back on
+  // this form and silently reset themselves to pending_review by submitting
+  // again.
+  if (verificationStatus === 'approved') {
+    return (
+      <SafeAreaView style={[st.container, { backgroundColor: C.background }]} edges={['top']}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SP[8] }}>
+          <View style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(34,197,94,0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: SP[6] }}>
+            <Ionicons name="shield-checkmark" size={52} color="#22C55E" />
+          </View>
+          <Text style={{ fontSize: TY['2xl'], fontWeight: Font.black, color: C.textPrimary, textAlign: 'center', marginBottom: SP[3] }}>
+            Already Verified
+          </Text>
+          <Text style={{ fontSize: TY.base, color: C.textSecondary, textAlign: 'center', lineHeight: 26, marginBottom: SP[8] }}>
+            Your account is already verified. There&apos;s nothing to resubmit.
+          </Text>
+          <TouchableOpacity
+            style={{ backgroundColor: C.orange, borderRadius: Radius.lg, paddingVertical: SP[4], paddingHorizontal: SP[8] }}
+            onPress={() => router.replace('/profile/verification-status')}
+          >
+            <Text style={{ fontSize: TY.md, fontWeight: Font.black, color: '#fff' }}>View Verification Status</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   // ── Success screen ────────────────────────────────────────────────────────────
 
   if (step === TOTAL_STEPS) {
@@ -421,6 +548,12 @@ export default function GetVerifiedScreen() {
       </SafeAreaView>
     );
   }
+
+  // Editing an existing application changes the framing (title, submit
+  // label) but not the steps themselves -- same four steps either way.
+  const isEditingPending = verificationStatus === 'pending_review';
+  const isResubmitting   = verificationStatus === 'rejected';
+  const submitLabel = isEditingPending ? 'Save Changes' : isResubmitting ? 'Resubmit for Review' : 'Submit for Review';
 
   // ── Step definitions ──────────────────────────────────────────────────────────
 
@@ -573,6 +706,27 @@ export default function GetVerifiedScreen() {
           <Text style={{ fontSize: TY.sm, color: C.textMuted, fontWeight: Font.semibold }}>Skip for now</Text>
         </TouchableOpacity>
 
+        {isEditingPending && (
+          <View style={{ marginHorizontal: SP[5], marginTop: SP[3], flexDirection: 'row', gap: SP[2], backgroundColor: 'rgba(251,191,36,0.08)', borderRadius: Radius.md, borderWidth: 1, borderColor: 'rgba(251,191,36,0.25)', padding: SP[3], alignItems: 'flex-start' }}>
+            <Ionicons name="time-outline" size={16} color="#FBBF24" />
+            <Text style={{ flex: 1, fontSize: TY.sm, color: '#FBBF24', lineHeight: 19 }}>
+              Editing your pending application. It's already under review — changes here update it in place.
+            </Text>
+          </View>
+        )}
+
+        {isResubmitting && (
+          <View style={{ marginHorizontal: SP[5], marginTop: SP[3], flexDirection: 'row', gap: SP[2], backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: Radius.md, borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)', padding: SP[3], alignItems: 'flex-start' }}>
+            <Ionicons name="alert-circle-outline" size={16} color="#EF4444" />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: TY.sm, fontWeight: Font.bold, color: '#EF4444', marginBottom: 2 }}>Previously rejected</Text>
+              <Text style={{ fontSize: TY.sm, color: '#EF4444', lineHeight: 19 }}>
+                {rejectionReason || 'See the issue below, fix it, and resubmit.'} Everything else from your last submission is pre-filled — only change what needs fixing.
+              </Text>
+            </View>
+          </View>
+        )}
+
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={{ paddingHorizontal: SP[5], paddingTop: SP[6], paddingBottom: SP[10] }}
@@ -604,7 +758,7 @@ export default function GetVerifiedScreen() {
               ? <ActivityIndicator color="#fff" size="small" />
               : <>
                   <Text style={st.nextBtnText}>
-                    {step === TOTAL_STEPS - 1 ? 'Submit for Review' : 'Continue'}
+                    {step === TOTAL_STEPS - 1 ? submitLabel : 'Continue'}
                   </Text>
                   <Ionicons name={step === TOTAL_STEPS - 1 ? 'checkmark' : 'arrow-forward'} size={18} color="#fff" />
                 </>

@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/context/ThemeContext';
+import VerificationGate from '@/components/VerificationGate';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
 import { Ionicons } from '@expo/vector-icons';
@@ -223,6 +224,9 @@ export default function JobDetailScreen() {
   const [cancelPolicyOpen,   setCancelPolicyOpen]   = useState(false);
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
   const [showQuoteSheet,     setShowQuoteSheet]     = useState(false);
+  const [verifyGateOpen,   setVerifyGateOpen]   = useState(false);
+  const [verifyGateStatus, setVerifyGateStatus] = useState<'not_submitted' | 'pending_review' | 'rejected'>('not_submitted');
+  const [verifyGateReason, setVerifyGateReason] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -399,12 +403,15 @@ export default function JobDetailScreen() {
 
   async function acceptInstantBook() {
     if (!booking || !user) return;
-    const { data: myContractor } = await supabase.from('contractors').select('verification_status, company_name').eq('id', user.id).single();
+    const { data: myContractor } = await supabase.from('contractors').select('verification_status, verification_rejection_reason, company_name').eq('id', user.id).single();
     if (myContractor?.verification_status !== 'approved') {
-      Alert.alert('Verification Required', 'Complete verification before accepting jobs.', [
-        { text: 'Later', style: 'cancel' },
-        { text: 'Get Verified', onPress: () => router.push('/profile/get-verified' as any) },
-      ]);
+      setVerifyGateStatus(
+        myContractor?.verification_status === 'pending_review' ? 'pending_review'
+          : myContractor?.verification_status === 'rejected'    ? 'rejected'
+          :                                                        'not_submitted'
+      );
+      setVerifyGateReason(myContractor?.verification_rejection_reason ?? null);
+      setVerifyGateOpen(true);
       return;
     }
     setOfferSaving(true);
@@ -1171,6 +1178,13 @@ export default function JobDetailScreen() {
 
         </View>
       </SafeAreaView>
+
+      <VerificationGate
+        visible={verifyGateOpen}
+        onClose={() => setVerifyGateOpen(false)}
+        status={verifyGateStatus}
+        rejectionReason={verifyGateReason}
+      />
     </View>
   );
 }

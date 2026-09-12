@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import NoAccountOverlay from '@/components/NoAccountOverlay';
+import VerificationGate from '@/components/VerificationGate';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -472,6 +473,14 @@ function ContractorProfileView({ profile, isOwner, teamActiveCount }: {
   const [obOpen,    setObOpen]    = useState(false);
   const [obMissing, setObMissing] = useState<{ key: string; label: string }[]>([]);
   const [obScore,   setObScore]   = useState(0);
+
+  // ── Verification gate — shown instead of a bare "Get Verified" link that
+  // used to route straight into the raw submission form regardless of
+  // status, which is how a pending contractor ended up resubmitting
+  // unlimited times. Pending/rejected/unverified all show the gate; its own
+  // CTA decides whether that leads to get-verified or nowhere (pending
+  // withholds a resubmit option entirely).
+  const [verifyGateOpen, setVerifyGateOpen] = useState(false);
   const bannerScale = useRef(new Animated.Value(1)).current;
 
   const onBannerPressIn = () => Animated.spring(bannerScale, { toValue: 0.97, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
@@ -485,6 +494,7 @@ function ContractorProfileView({ profile, isOwner, teamActiveCount }: {
   }, [profile?.company_name, profile?.phone, profile?.location, profile?.avatar_url, profile?.username]);
 
   return (
+    <>
     <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
       {/* Profile card */}
@@ -764,8 +774,8 @@ function ContractorProfileView({ profile, isOwner, teamActiveCount }: {
             : <MenuItem
                 icon="✅"
                 label="Get Verified"
-                subtitle={profile?.verification_status === 'pending_review' ? 'Under review · Usually 24 hours' : 'Unlock the job feed and verified badge'}
-                onPress={() => router.push('/profile/get-verified')}
+                subtitle={profile?.verification_status === 'pending_review' ? 'Under review · Usually 72 hours' : 'Unlock the job feed and verified badge'}
+                onPress={() => setVerifyGateOpen(true)}
               />
           }
           <View style={styles.menuDivider} />
@@ -940,6 +950,19 @@ function ContractorProfileView({ profile, isOwner, teamActiveCount }: {
         </View>
       </Modal>
     </ScrollView>
+
+    <VerificationGate
+      visible={verifyGateOpen}
+      onClose={() => setVerifyGateOpen(false)}
+      status={
+        profile?.verification_status === 'pending_review' ? 'pending_review'
+          : profile?.verification_status === 'rejected'    ? 'rejected'
+          :                                                   'not_submitted'
+      }
+      companyName={profile?.company_name}
+      rejectionReason={profile?.verification_rejection_reason}
+    />
+    </>
   );
 }
 
