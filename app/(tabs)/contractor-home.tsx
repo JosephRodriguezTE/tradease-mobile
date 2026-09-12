@@ -916,8 +916,19 @@ export default function ContractorHomeScreen() {
   // ── Online/offline toggle — owners only ──────────────────────────────────────
   async function toggleOnline() {
     if (!contractor || roleRef.current.isEmployee) return;
-    setTogglingOnline(true);
     const next = !contractor.is_available;
+    // Going offline is always allowed. Going online requires approval --
+    // also enforced server-side (a trigger on contractors rejects the
+    // update outright), this just gives a real message instead of the
+    // raw DB error for the common case of stale/never-approved status.
+    if (next && contractor.verification_status !== 'approved') {
+      Alert.alert('Verification Required', 'Complete verification before going online.', [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Get Verified', onPress: () => router.push('/profile/get-verified' as any) },
+      ]);
+      return;
+    }
+    setTogglingOnline(true);
     const { error } = await supabase
       .from('contractors')
       .update({ is_available: next, is_online: next })
@@ -936,6 +947,13 @@ export default function ContractorHomeScreen() {
           updated_at: new Date().toISOString(),
         }, { onConflict: 'contractor_id' }).then(() => {});
       }
+    } else {
+      Alert.alert(
+        'Error',
+        error.message?.includes('Cannot go online')
+          ? 'Complete verification before going online.'
+          : (error.message || 'Could not update your status. Try again.')
+      );
     }
     setTogglingOnline(false);
   }

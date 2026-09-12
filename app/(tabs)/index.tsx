@@ -364,12 +364,31 @@ function ContractorHome() {
   async function toggleAvailable() {
     if (!contractorIdRef.current) return;
     const newVal = !isAvailable;
+    // Going offline is always allowed. Going online requires approval --
+    // also enforced server-side (a trigger on contractors rejects the
+    // update outright), this just gives a real message instead of the
+    // raw DB error for the common case of stale/never-approved status.
+    if (newVal && profile?.verification_status !== 'approved') {
+      Alert.alert('Verification Required', 'Complete verification before going online.', [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Get Verified', onPress: () => router.push('/profile/get-verified' as any) },
+      ]);
+      return;
+    }
     setIsAvailable(newVal);
     const { error } = await supabase
       .from('contractors')
       .update({ is_available: newVal })
       .eq('id', contractorIdRef.current);
-    if (error) setIsAvailable(!newVal);
+    if (error) {
+      setIsAvailable(!newVal);
+      Alert.alert(
+        'Error',
+        error.message?.includes('Cannot go online')
+          ? 'Complete verification before going online.'
+          : (error.message || 'Could not update your status. Try again.')
+      );
+    }
   }
 
   if (loading) {
