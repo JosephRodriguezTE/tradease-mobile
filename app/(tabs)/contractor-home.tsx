@@ -415,7 +415,7 @@ export function QuoteBottomSheet({ booking, contractorId, visible, onClose, onSe
             numberOfLines={3}
           />
           {!!error && <Text style={qbs.error}>{error}</Text>}
-          <Text style={qbs.expireNote}>⏱ Quote expires in 4 hours · Customer may counter once</Text>
+          <Text style={qbs.expireNote}>⏱ Quote expires in 24 hours · Customer may counter once</Text>
           <TouchableOpacity
             style={[qbs.sendBtn, loading && { opacity: 0.5 }]}
             onPress={sendQuote}
