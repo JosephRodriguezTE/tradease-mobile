@@ -372,7 +372,14 @@ export default function JobDetailScreen() {
     Alert.alert('Decline Quote', "Decline this contractor's quote?", [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Decline', style: 'destructive', onPress: async () => {
-        await supabase.from('job_offers').update({ status: 'declined', customer_action: 'declined' }).eq('id', offer!.id);
+        const { error } = await supabase.rpc('customer_respond_offer', {
+          p_offer_id: offer!.id,
+          p_action: 'declined',
+        });
+        if (error) {
+          Alert.alert('Error', error.message || 'Could not decline quote. Try again.');
+          return;
+        }
         setOffer((p: any) => ({ ...p, status: 'declined' }));
       }},
     ]);
@@ -910,6 +917,32 @@ export default function JobDetailScreen() {
                 }
               </TouchableOpacity>
             </View>
+          </View>
+        )}
+
+        {/* Quote declined — the booking never left the open pool while the
+            quote was outstanding (submit_quote() doesn't touch bookings.status
+            /contractor_id), so there's nothing to reopen server-side once
+            customer_respond_offer flips the offer to 'declined'. This banner
+            exists so the customer sees that instead of a dead card with no
+            matching render branch. */}
+        {isCustomer && booking.status === 'pending' && offer?.status === 'declined' && (
+          <View style={[s.pendingCard, { backgroundColor: 'rgba(251,191,36,0.06)', borderColor: 'rgba(251,191,36,0.2)', flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Ionicons name="refresh-outline" size={20} color="#FBBF24" />
+              <View style={{ flex: 1 }}>
+                <Text style={[s.pendingTitle, { color: '#FBBF24' }]}>Job reopened</Text>
+                <Text style={[s.pendingSub, { color: C.textSecondary }]}>
+                  You declined that quote. Your job is back in front of nearby contractors — you'll get a notification the moment someone else quotes. You can also browse and pick a contractor yourself.
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[s.offerBtn, s.offerBtnAccept, { backgroundColor: C.orange }]}
+              onPress={requestCompanyCards}
+            >
+              <Text style={s.offerBtnAcceptText}>Browse Contractors</Text>
+            </TouchableOpacity>
           </View>
         )}
 
