@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentPosition, reverseGeocode, Coords } from '@/lib/locationService';
 import { MAPBOX_ACCESS_TOKEN, DEFAULT_MAP_REGION } from '@/lib/mapConfig';
 import { FILTERABLE_TRADES, fromDbValue, getTrade, Trade } from '@/lib/map/trades';
+import { formatReopensIn } from '@/lib/time';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetFlatList, BottomSheetView } from '@gorhom/bottom-sheet';
 import { BlurView } from 'expo-blur';
@@ -68,6 +69,8 @@ interface NearbyJob {
   fuzzed_lng: number | null;
   town: string | null;
   nearest_major_road: string | null;
+  is_quote_locked?: boolean;
+  quote_locked_until?: string | null;
 }
 
 const RADII = [10, 25, 50] as const;
@@ -394,6 +397,13 @@ function JobCard({ item, onPress, selected, C }: {
         </View>
         {item.price_estimate != null && (
           <Text style={s.jobPrice}>${item.price_estimate.toLocaleString()}</Text>
+        )}
+        {item.is_quote_locked && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(120,120,120,0.15)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 }}>
+            <Text style={{ fontSize: 11, color: C.textMuted, fontWeight: '700' }}>
+              Quote pending{item.quote_locked_until ? ` · ${formatReopensIn(item.quote_locked_until)}` : ''}
+            </Text>
+          </View>
         )}
       </View>
       <Text style={s.jobDesc} numberOfLines={2}>

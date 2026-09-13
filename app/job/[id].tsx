@@ -26,7 +26,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Spacing } from '../../constants/Layout';
 import { Font, Radius } from '../../constants/theme';
 import { deriveChatId } from '../../lib/messageService';
-import { formatRemaining } from '../../lib/time';
+import { formatRemaining, formatReopensIn } from '../../lib/time';
 import { supabase } from '../../lib/supabase';
 import { QuoteBottomSheet } from '../(tabs)/contractor-home';
 
@@ -782,29 +782,48 @@ export default function JobDetailScreen() {
           </View>
         )}
 
-        {/* Same state, contractor view — quoting CTA instead of customer copy */}
+        {/* Same state, contractor view — quoting CTA instead of customer copy.
+            is_quote_locked comes from public_job_by_id(): another contractor
+            already has an active quote on this booking. submit_quote() would
+            reject it server-side anyway (exclusivity check), so the button is
+            disabled here rather than letting the contractor hit that error. */}
         {!isExpired && isContractor && booking.status === 'pending' && !offer && !booking.is_instant_book && (
-          <View style={[s.pendingCard, { backgroundColor: 'rgba(255,98,0,0.06)', borderColor: 'rgba(255,98,0,0.2)', flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
+          <View style={[s.pendingCard, { backgroundColor: booking.is_quote_locked ? 'rgba(120,120,120,0.08)' : 'rgba(255,98,0,0.06)', borderColor: booking.is_quote_locked ? 'rgba(120,120,120,0.2)' : 'rgba(255,98,0,0.2)', flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <Ionicons name="pricetag-outline" size={20} color={C.orange} />
+              <Ionicons name={booking.is_quote_locked ? 'hourglass-outline' : 'pricetag-outline'} size={20} color={booking.is_quote_locked ? C.textMuted : C.orange} />
               <View style={{ flex: 1 }}>
-                <Text style={[s.pendingTitle, { color: C.orange }]}>This job needs a quote</Text>
-                <Text style={[s.pendingSub, { color: C.textSecondary }]}>
-                  Send a price and timeline to be considered for this job.
+                <Text style={[s.pendingTitle, { color: booking.is_quote_locked ? C.textMuted : C.orange }]}>
+                  {booking.is_quote_locked ? 'Quote pending' : 'This job needs a quote'}
                 </Text>
-                {!!booking.request_expires_at && (
+                <Text style={[s.pendingSub, { color: C.textSecondary }]}>
+                  {booking.is_quote_locked
+                    ? 'Another contractor already has an active quote on this job.'
+                    : 'Send a price and timeline to be considered for this job.'}
+                </Text>
+                {booking.is_quote_locked && !!booking.quote_locked_until && (
+                  <Text style={[s.pendingSub, { color: C.textMuted, marginTop: 4, fontWeight: '700' }]}>
+                    {formatReopensIn(booking.quote_locked_until)} if unanswered
+                  </Text>
+                )}
+                {!booking.is_quote_locked && !!booking.request_expires_at && (
                   <Text style={[s.pendingSub, { color: C.orange, marginTop: 4, fontWeight: '700' }]}>
                     {formatRemaining(booking.request_expires_at)}
                   </Text>
                 )}
               </View>
             </View>
-            <TouchableOpacity
-              style={[s.offerBtn, s.offerBtnAccept, { backgroundColor: C.orange }]}
-              onPress={() => setShowQuoteSheet(true)}
-            >
-              <Text style={s.offerBtnAcceptText}>Send a Quote</Text>
-            </TouchableOpacity>
+            {booking.is_quote_locked ? (
+              <View style={[s.offerBtn, { backgroundColor: '#1A1A1A', borderWidth: 1, borderColor: '#2A2A2A' }]}>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#555' }}>Quoting unavailable</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[s.offerBtn, s.offerBtnAccept, { backgroundColor: C.orange }]}
+                onPress={() => setShowQuoteSheet(true)}
+              >
+                <Text style={s.offerBtnAcceptText}>Send a Quote</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 

@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase';
 import { deriveChatId } from '@/lib/messageService';
 import { startLiveTracking, stopLiveTracking } from '@/lib/locationService';
 import { haversine } from '@/lib/geo';
+import { formatReopensIn } from '@/lib/time';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -47,6 +48,8 @@ interface Job {
   priorityType?: 'leads' | 'pro';
   is_instant_book?: boolean;
   instant_book_price?: number | null;
+  is_quote_locked?: boolean;
+  quote_locked_until?: string | null;
 }
 
 interface Earnings {
@@ -543,6 +546,13 @@ function JobCard({ job, onQuote, onAccept, C, verified, canAcceptJobs }: {
         <View style={[jc.acceptBtn, jc.acceptBtnLocked]}>
           <Ionicons name="ban-outline" size={16} color="#555" />
           <Text style={jc.acceptTextLocked}>Contact manager to enable job acceptance</Text>
+        </View>
+      ) : job.is_quote_locked ? (
+        <View style={[jc.acceptBtn, jc.acceptBtnLocked]}>
+          <Ionicons name="hourglass-outline" size={16} color="#555" />
+          <Text style={jc.acceptTextLocked}>
+            Quote pending · {job.quote_locked_until ? formatReopensIn(job.quote_locked_until) : 'may reopen soon'}
+          </Text>
         </View>
       ) : (
         <TouchableOpacity
