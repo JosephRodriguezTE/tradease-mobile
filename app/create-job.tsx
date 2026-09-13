@@ -24,7 +24,6 @@ import { Colors, Font, Radius } from '../constants/theme';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
-import { haversine } from '../lib/geo';
 import {
   ALL_TRADES,
   PRICE_RANGES,
@@ -87,6 +86,7 @@ export default function CreateJobScreen() {
 
   const [matchedContractors,  setMatchedContractors]  = useState<any[]>([]);
   const [sortByNearest,       setSortByNearest]       = useState(false);
+  const [nearestDistances,    setNearestDistances]    = useState<Record<string, number>>({});
   const [specialtyPricing,    setSpecialtyPricing]    = useState<{ price_min: number; price_max: number; price_common: number; unit: string } | null>(null);
   const [areaContractorCount, setAreaContractorCount] = useState<number | null>(null);
   const [loadingContractors,  setLoadingContractors]  = useState(false);
@@ -168,7 +168,7 @@ export default function CreateJobScreen() {
       const [{ data: contractors }, { data: pricing }] = await Promise.all([
         supabase
           .from('contractors_public')
-          .select('id, company_name, avatar_url, rating, specializations, service_area, lat, lng')
+          .select('id, company_name, avatar_url, rating, specializations, service_area')
           .eq('verification_status', 'approved')
           .eq('is_available', true),
         supabase
@@ -290,13 +290,32 @@ export default function CreateJobScreen() {
     }
   };
 
+  // contractors_public no longer carries lat/lng (see
+  // lib/map/location-privacy.ts) -- distance comes from a dedicated
+  // SECURITY DEFINER RPC that takes the ids we already matched on and
+  // returns a scalar distance per id, never a coordinate.
+  useEffect(() => {
+    if (!sortByNearest || !detectedCoords || matchedContractors.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.rpc('contractor_distances_miles', {
+        p_contractor_ids: matchedContractors.map(c => c.id),
+        user_lat: detectedCoords.lat,
+        user_lng: detectedCoords.lng,
+      });
+      if (cancelled || !data) return;
+      const byId: Record<string, number> = {};
+      for (const row of data as { id: string; distance_miles: number }[]) byId[row.id] = row.distance_miles;
+      setNearestDistances(byId);
+    })();
+    return () => { cancelled = true; };
+  }, [sortByNearest, detectedCoords, matchedContractors]);
+
   const sortedMatchedContractors = (sortByNearest && detectedCoords)
     ? [...matchedContractors]
         .map(c => ({
           ...c,
-          distance_miles: (c.lat != null && c.lng != null)
-            ? haversine(detectedCoords.lat, detectedCoords.lng, c.lat, c.lng)
-            : null,
+          distance_miles: nearestDistances[c.id] ?? null,
         }))
         .sort((a, b) => (a.distance_miles ?? Infinity) - (b.distance_miles ?? Infinity))
     : matchedContractors;

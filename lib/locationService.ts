@@ -67,18 +67,6 @@ export async function reverseGeocode(coords: Coords): Promise<{
   }
 }
 
-// ── PRIVACY: FUZZ COORDINATES ─────────────────────────────
-// Adds ~0.3 mile random offset so customers can't track exact movement.
-export function fuzzCoords(coords: Coords, radiusMiles = 0.3): Coords {
-  const r = radiusMiles / 69; // 1 deg ≈ 69 miles
-  const angle = Math.random() * 2 * Math.PI;
-  const distance = Math.random() * r;
-  return {
-    lat: coords.lat + distance * Math.cos(angle),
-    lng: coords.lng + distance * Math.sin(angle) / Math.cos(coords.lat * Math.PI / 180),
-  };
-}
-
 // ── SAVE LOCATION ─────────────────────────────────────────
 export async function saveCustomerLocation(userId: string, coords: Coords) {
   await supabase
@@ -96,14 +84,23 @@ export async function saveContractorLocation(
   coords: Coords,
   mode: 'live' | 'manual'
 ) {
-  // For live mode, fuzz before saving so DB never holds exact coords
-  const stored = mode === 'live' ? fuzzCoords(coords) : coords;
-
+  // Used to fuzz this with a ~0.3mi random offset before storing. That
+  // protected nothing once contractors_nearby() started computing the
+  // public-safe pin server-side (coverage-blob center or an opted-in
+  // storefront point, never this raw value) -- and it made things worse,
+  // not better: Math.random() re-rolled on every 60-second GPS tick, so a
+  // client polling the old contractors_nearby() repeatedly over a session
+  // could average samples toward the true point, the exact attack
+  // fuzzPoint()'s deterministic, id-derived offset (lib/map/location-
+  // privacy.ts) exists to prevent. Now that contractors_public no longer
+  // exposes lat/lng at all (see the migration removing it), this is the
+  // only place the point ever gets written -- storing it true and letting
+  // the read path be the sole privacy boundary is strictly better.
   await supabase
     .from('contractors')
     .update({
-      lat: stored.lat,
-      lng: stored.lng,
+      lat: coords.lat,
+      lng: coords.lng,
       location_mode: mode,
       last_location_update: new Date().toISOString(),
     })
@@ -112,8 +109,8 @@ export async function saveContractorLocation(
   // Upsert live location row (contractor_id is the PK)
   await supabase.from('contractor_locations').upsert({
     contractor_id: contractorId,
-    lat: stored.lat,
-    lng: stored.lng,
+    lat: coords.lat,
+    lng: coords.lng,
     is_online: true,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'contractor_id' });
