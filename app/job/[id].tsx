@@ -653,6 +653,14 @@ export default function JobDetailScreen() {
     && !booking.contractor_id
     && !!booking.request_expires_at
     && new Date(booking.request_expires_at) < new Date();
+  // Separate from isExpired above -- that's the booking's own request
+  // window (nobody claimed it at all). This is the *offer's* deadline:
+  // sweep_expired_quotes() flips status to 'expired' within 15 minutes,
+  // but until it runs a quote can sit at status='quoted' past its own
+  // expires_at -- checked client-side too so the banner doesn't render as
+  // live with working buttons during that gap.
+  const isOfferExpired = offer?.status === 'expired'
+    || (offer?.status === 'quoted' && !!offer?.expires_at && new Date(offer.expires_at) < new Date());
   const chatId = booking.contractor_id && booking.customer_id
     ? deriveChatId(booking.customer_id, booking.contractor_id)
     : null;
@@ -891,8 +899,10 @@ export default function JobDetailScreen() {
           </View>
         )}
 
-        {/* Quote received — customer action required */}
-        {isCustomer && booking.status === 'pending' && offer?.status === 'quoted' && (
+        {/* Quote received — customer action required. Expiry is shown up
+            front, before the customer taps anything, instead of only
+            surfacing as a rejected-RPC error on Accept. */}
+        {isCustomer && booking.status === 'pending' && offer?.status === 'quoted' && !isOfferExpired && (
           <View style={[s.offerBanner, { backgroundColor: 'rgba(251,191,36,0.08)', borderColor: 'rgba(251,191,36,0.3)' }]}>
             <Text style={[s.offerBannerTitle, { color: '#FBBF24' }]}>💰 Quote Received</Text>
             <Text style={[s.offerBannerSub, { color: C.textSecondary }]}>
@@ -900,6 +910,11 @@ export default function JobDetailScreen() {
               <Text style={{ fontWeight: '900', color: '#FBBF24' }}>${offer.quoted_price?.toLocaleString()}</Text>
               {offer.quote_note ? ` · "${offer.quote_note}"` : ''}
             </Text>
+            {!!offer.expires_at && (
+              <Text style={[s.offerBannerWarning, { color: '#FBBF24', fontWeight: '700' }]}>
+                ⏱ {formatRemaining(offer.expires_at)}
+              </Text>
+            )}
             <Text style={[s.offerBannerWarning, { color: C.textMuted }]}>
               ⚠️ You can accept, decline, or counter once. Countering is final.
             </Text>
@@ -917,6 +932,33 @@ export default function JobDetailScreen() {
                 }
               </TouchableOpacity>
             </View>
+          </View>
+        )}
+
+        {/* Quote expired — renders instead of the banner above the moment
+            expires_at passes, even before sweep_expired_quotes() (cron,
+            up to a 15-minute lag) flips the row server-side. No working
+            Accept/Decline/Counter buttons here; customer_respond_offer
+            would reject all three anyway once the row is actually
+            'expired'. */}
+        {isCustomer && booking.status === 'pending' && isOfferExpired && (
+          <View style={[s.pendingCard, { backgroundColor: 'rgba(239,68,68,0.06)', borderColor: 'rgba(239,68,68,0.2)', flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Ionicons name="time-outline" size={20} color="#EF4444" />
+              <View style={{ flex: 1 }}>
+                <Text style={[s.pendingTitle, { color: '#EF4444' }]}>Quote expired</Text>
+                <Text style={[s.pendingSub, { color: C.textSecondary }]}>
+                  {offer?.quoted_price != null ? `The $${offer.quoted_price.toLocaleString()} quote ` : 'The quote '}
+                  went unanswered and is no longer available. Your job is back in front of nearby contractors.
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[s.offerBtn, s.offerBtnAccept, { backgroundColor: C.orange }]}
+              onPress={requestCompanyCards}
+            >
+              <Text style={s.offerBtnAcceptText}>Browse Contractors</Text>
+            </TouchableOpacity>
           </View>
         )}
 
