@@ -1,0 +1,28 @@
+-- "Contractors can upload job photos" only checked auth.role() =
+-- 'authenticated' -- no folder scoping at all, unlike every other bucket
+-- (avatars, portfolio, portfolio-completed, verification-docs,
+-- work-orders all scope to storage.foldername(name)[1] = auth.uid()).
+-- Any authenticated session could write anywhere in the bucket.
+--
+-- Checked before this: zero existing objects in job-photos (nothing to
+-- break), and create-job.tsx (the only writer) uploaded to
+-- <bookingRef>/<timestamp>.<ext> -- not per-user, and often keyed on a
+-- synthetic new_<timestamp> placeholder since photos upload before the
+-- booking row exists. Scoping the policy alone would have broken every
+-- upload; the client now prefixes the path with the uploader's own id
+-- (app/create-job.tsx) in the same commit as this policy change --
+-- neither half is safe to ship without the other.
+--
+-- Notably, "Contractors can delete their job photos" (DELETE) already
+-- expected this exact shape (auth.uid())::text = (storage.foldername
+-- (name))[1] -- it just never matched anything, since nothing ever
+-- uploaded in that shape. This fix also makes that policy functional for
+-- the first time, not just closes the INSERT hole.
+--
+-- Proved directly against storage.objects (the table the real Storage
+-- API upload path is gated by): a real customer session inserting under
+-- their own id succeeds; the same session inserting under a different
+-- contractor's id is rejected with "new row violates row-level security
+-- policy". Test row removed and re-confirmed zero rows in the bucket.
+ALTER POLICY "Contractors can upload job photos" ON storage.objects
+WITH CHECK (bucket_id = 'job-photos' AND (auth.uid())::text = (storage.foldername(name))[1]);

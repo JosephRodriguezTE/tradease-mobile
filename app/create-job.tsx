@@ -540,7 +540,13 @@ export default function CreateJobScreen() {
           for (const uri of selectedImages) {
             try {
               const ext  = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
-              const path = `${bookingRef}/${Date.now()}.${ext}`;
+              // Prefixed with the uploader's own id so the storage policy
+              // can scope writes to storage.foldername(name)[1] = auth.uid(),
+              // matching every other bucket. bookingRef alone isn't a
+              // usable ownership key here -- photos upload before the
+              // booking row exists, so it's frequently a synthetic
+              // new_<timestamp> placeholder, not a real booking id.
+              const path = `${freshUser.id}/${bookingRef}/${Date.now()}.${ext}`;
               const res  = await fetch(uri);
               const blob = await res.blob();
               const { error: uploadErr } = await supabase.storage
