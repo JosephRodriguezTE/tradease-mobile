@@ -97,6 +97,7 @@ export const OnboardingType = {
 /** Every distinct raw padding/margin value from the funnel, named by role. */
 export const OnboardingSpacing = {
   none: 0,
+  xxxs: 2,
   xxs: 4,
   xs: 6,
   sm: 8,
@@ -107,4 +108,8 @@ export const OnboardingSpacing = {
   lgXl: 16,
   xl: 20,
   xxl: 40,
+  /** get-verified.tsx's footer safe-bottom padding -- a one-off, not part
+   * of the scale's progression, but still a real value that needs a name
+   * rather than a magic number in the file. */
+  footerPad: 34,
 } as const;

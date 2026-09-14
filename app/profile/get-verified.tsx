@@ -15,6 +15,7 @@ import { decode as decodeBase64 } from 'base64-arraybuffer';
 import { supabase } from '@/lib/supabase';
 import { useTheme, AppColors } from '@/context/ThemeContext';
 import { Font, Radius } from '../../constants/theme';
+import { OnboardingColors as OC, OnboardingSpacing as OS2 } from '@/lib/design/onboarding-tokens';
 
 const SP = { 1:4,2:8,3:12,4:16,5:20,6:24,8:32,10:40 } as const;
 const TY = { xs:11,sm:13,base:15,md:17,lg:20,xl:24,'2xl':30 } as const;
@@ -86,7 +87,7 @@ function MonthYearPicker({
                 opacity: isPast ? 0.3 : 1,
               }}
             >
-              <Text style={{ fontSize: TY.sm, fontWeight: Font.semibold, color: isSelected ? '#fff' : C.textPrimary }}>
+              <Text style={{ fontSize: TY.sm, fontWeight: Font.semibold, color: isSelected ? OC.white : C.textPrimary }}>
                 {m}
               </Text>
             </TouchableOpacity>
@@ -121,11 +122,11 @@ function UploadField({
           {isImage
             ? <Image source={{ uri }} style={{ width: 56, height: 56, borderRadius: Radius.sm }} resizeMode="cover" />
             : <View style={{ width: 56, height: 56, borderRadius: Radius.sm, backgroundColor: C.surface, alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name="document-outline" size={26} color="#22C55E" />
+                <Ionicons name="document-outline" size={26} color={OC.success} />
               </View>
           }
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: TY.sm, fontWeight: Font.bold, color: '#22C55E' }}>✓ Document selected</Text>
+            <Text style={{ fontSize: TY.sm, fontWeight: Font.bold, color: OC.success }}>✓ Document selected</Text>
             <Text style={{ fontSize: TY.xs, color: C.textMuted, marginTop: 2 }} numberOfLines={1}>{fileName}</Text>
           </View>
           <View style={{ flexDirection: 'row' }}>
@@ -504,7 +505,7 @@ export default function GetVerifiedScreen() {
       <SafeAreaView style={[st.container, { backgroundColor: C.background }]} edges={['top']}>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SP[8] }}>
           <View style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(34,197,94,0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: SP[6] }}>
-            <Ionicons name="shield-checkmark" size={52} color="#22C55E" />
+            <Ionicons name="shield-checkmark" size={52} color={OC.success} />
           </View>
           <Text style={{ fontSize: TY['2xl'], fontWeight: Font.black, color: C.textPrimary, textAlign: 'center', marginBottom: SP[3] }}>
             Already Verified
@@ -516,7 +517,7 @@ export default function GetVerifiedScreen() {
             style={{ backgroundColor: C.orange, borderRadius: Radius.lg, paddingVertical: SP[4], paddingHorizontal: SP[8] }}
             onPress={() => router.replace('/profile/verification-status')}
           >
-            <Text style={{ fontSize: TY.md, fontWeight: Font.black, color: '#fff' }}>View Verification Status</Text>
+            <Text style={{ fontSize: TY.md, fontWeight: Font.black, color: OC.white }}>View Verification Status</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -524,27 +525,56 @@ export default function GetVerifiedScreen() {
   }
 
   // ── Success screen ────────────────────────────────────────────────────────────
+  // Previously a dead end (headline + 72h reassurance + a single "Back to
+  // Profile" button) -- nothing to do but wait. Replaced with three real,
+  // reachable-right-now actions: the job feed IS browsable pre-approval
+  // (contractor-home.tsx renders it regardless of verification_status;
+  // VerificationGate only appears when an unverified contractor taps
+  // Accept/Quote), so "browse open jobs" isn't a dead link.
 
   if (step === TOTAL_STEPS) {
+    const nextSteps = [
+      { icon: 'business-outline' as const, title: 'Build your company profile', sub: 'Services, service area, and pricing', to: '/profile/company-profile' as const },
+      { icon: 'images-outline' as const, title: 'Add portfolio photos', sub: 'Customers see this before anything else', to: '/profile/portfolio' as const },
+      { icon: 'briefcase-outline' as const, title: 'Browse open jobs', sub: 'See what\'s nearby now — ready the moment you\'re approved', to: '/(tabs)/contractor-home' as const },
+    ];
     return (
       <SafeAreaView style={[st.container, { backgroundColor: C.background }]} edges={['top']}>
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SP[8] }}>
+        <ScrollView contentContainerStyle={{ flexGrow: 1, alignItems: 'center', paddingHorizontal: SP[8], paddingTop: SP[10], paddingBottom: SP[8] }}>
           <View style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(34,197,94,0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: SP[6] }}>
-            <Ionicons name="checkmark-circle" size={52} color="#22C55E" />
+            <Ionicons name="checkmark-circle" size={52} color={OC.success} />
           </View>
           <Text style={{ fontSize: TY['2xl'], fontWeight: Font.black, color: C.textPrimary, textAlign: 'center', marginBottom: SP[3] }}>
             Under Review
           </Text>
-          <Text style={{ fontSize: TY.base, color: C.textSecondary, textAlign: 'center', lineHeight: 26, marginBottom: SP[8] }}>
-            Your application is being reviewed by the Tradease team. We&apos;ll notify you within 72 hours once approved.
+          <Text style={{ fontSize: TY.base, color: C.textSecondary, textAlign: 'center', lineHeight: 26, marginBottom: SP[6] }}>
+            We&apos;ll notify you within 72 hours once approved. Worth doing while you wait:
           </Text>
-          <TouchableOpacity
-            style={{ backgroundColor: C.orange, borderRadius: Radius.lg, paddingVertical: SP[4], paddingHorizontal: SP[8] }}
-            onPress={() => router.replace('/(tabs)/profile')}
-          >
-            <Text style={{ fontSize: TY.md, fontWeight: Font.black, color: '#fff' }}>Back to Profile</Text>
+
+          <View style={{ width: '100%', gap: SP[2] }}>
+            {nextSteps.map(item => (
+              <TouchableOpacity
+                key={item.to}
+                style={[st.nextStepRow, { backgroundColor: C.surfaceAlt, borderColor: C.border }]}
+                onPress={() => router.push(item.to as any)}
+                activeOpacity={0.7}
+              >
+                <View style={[st.nextStepIcon, { backgroundColor: 'rgba(255,98,0,0.12)' }]}>
+                  <Ionicons name={item.icon} size={20} color={C.orange} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: TY.sm, fontWeight: Font.bold, color: C.textPrimary }}>{item.title}</Text>
+                  <Text style={{ fontSize: TY.xs, color: C.textMuted, marginTop: 1 }}>{item.sub}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={C.textMuted} />
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <TouchableOpacity onPress={() => router.replace('/(tabs)/profile')} style={{ marginTop: SP[6] }}>
+            <Text style={{ fontSize: TY.sm, fontWeight: Font.semibold, color: C.textMuted }}>Back to Profile</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -697,33 +727,38 @@ export default function GetVerifiedScreen() {
           <View style={{ flex: 1, marginHorizontal: SP[4] }}>
             <ProgressBar step={step} total={TOTAL_STEPS} C={C} />
           </View>
-          <Text style={{ fontSize: TY.xs, color: C.textMuted, fontWeight: Font.bold, minWidth: 40, textAlign: 'right' }}>
-            {step + 1} / {TOTAL_STEPS}
+          <Text style={{ fontSize: TY.xs, color: C.textMuted, fontWeight: Font.bold, minWidth: 76, textAlign: 'right' }}>
+            Step {step + 1} of {TOTAL_STEPS}
           </Text>
         </View>
+
+        {/* Names what's left instead of leaving it to a bare fraction --
+            a contractor mid-upload should know whether what's coming is
+            one quick field or two more document uploads. */}
+        {step < TOTAL_STEPS - 1 && (
+          <Text style={{ fontSize: TY.xs, color: C.textMuted, paddingHorizontal: SP[5], paddingTop: SP[2] }}>
+            Then: {stepTitles.slice(step + 1).join(' · ')}
+          </Text>
+        )}
 
         <TouchableOpacity onPress={handleSkip} style={{ alignSelf: 'flex-end', paddingHorizontal: SP[5], paddingTop: SP[3] }}>
           <Text style={{ fontSize: TY.sm, color: C.textMuted, fontWeight: Font.semibold }}>Skip for now</Text>
         </TouchableOpacity>
 
         {isEditingPending && (
-          <View style={{ marginHorizontal: SP[5], marginTop: SP[3], flexDirection: 'row', gap: SP[2], backgroundColor: 'rgba(251,191,36,0.08)', borderRadius: Radius.md, borderWidth: 1, borderColor: 'rgba(251,191,36,0.25)', padding: SP[3], alignItems: 'flex-start' }}>
-            <Ionicons name="time-outline" size={16} color="#FBBF24" />
-            <Text style={{ flex: 1, fontSize: TY.sm, color: '#FBBF24', lineHeight: 19 }}>
+          <View style={[st.statusRule, { borderLeftColor: OC.warning, marginHorizontal: SP[5], marginTop: SP[3] }]}>
+            <Text style={{ fontSize: TY.sm, color: OC.warning, lineHeight: 19 }}>
               Editing your pending application. It's already under review — changes here update it in place.
             </Text>
           </View>
         )}
 
         {isResubmitting && (
-          <View style={{ marginHorizontal: SP[5], marginTop: SP[3], flexDirection: 'row', gap: SP[2], backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: Radius.md, borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)', padding: SP[3], alignItems: 'flex-start' }}>
-            <Ionicons name="alert-circle-outline" size={16} color="#EF4444" />
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: TY.sm, fontWeight: Font.bold, color: '#EF4444', marginBottom: 2 }}>Previously rejected</Text>
-              <Text style={{ fontSize: TY.sm, color: '#EF4444', lineHeight: 19 }}>
-                {rejectionReason || 'See the issue below, fix it, and resubmit.'} Everything else from your last submission is pre-filled — only change what needs fixing.
-              </Text>
-            </View>
+          <View style={[st.statusRule, { borderLeftColor: OC.error, marginHorizontal: SP[5], marginTop: SP[3] }]}>
+            <Text style={{ fontSize: TY.sm, fontWeight: Font.bold, color: OC.error, marginBottom: 2 }}>Previously rejected</Text>
+            <Text style={{ fontSize: TY.sm, color: OC.error, lineHeight: 19 }}>
+              {rejectionReason || 'See the issue below, fix it, and resubmit.'} Everything else from your last submission is pre-filled — only change what needs fixing.
+            </Text>
           </View>
         )}
 
@@ -755,12 +790,12 @@ export default function GetVerifiedScreen() {
             disabled={!canProceed() || submitting}
           >
             {submitting
-              ? <ActivityIndicator color="#fff" size="small" />
+              ? <ActivityIndicator color={OC.white} size="small" />
               : <>
                   <Text style={st.nextBtnText}>
                     {step === TOTAL_STEPS - 1 ? submitLabel : 'Continue'}
                   </Text>
-                  <Ionicons name={step === TOTAL_STEPS - 1 ? 'checkmark' : 'arrow-forward'} size={18} color="#fff" />
+                  <Ionicons name={step === TOTAL_STEPS - 1 ? 'checkmark' : 'arrow-forward'} size={18} color={OC.white} />
                 </>
             }
           </TouchableOpacity>
@@ -775,9 +810,17 @@ const st = StyleSheet.create({
   container:   { flex: 1 },
   header:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SP[5], paddingVertical: SP[4], borderBottomWidth: 0.5 },
   backBtn:     { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  footer:      { paddingHorizontal: SP[5], paddingBottom: 34, paddingTop: SP[3], borderTopWidth: 0.5 },
-  nextBtn:     { borderRadius: Radius.lg, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SP[2] },
-  nextBtnText: { fontSize: TY.base, fontWeight: Font.black, color: '#fff' },
+  footer:      { paddingHorizontal: SP[5], paddingBottom: OS2.footerPad, paddingTop: SP[3], borderTopWidth: 0.5 },
+  nextBtn:     { borderRadius: Radius.lg, paddingVertical: OS2.lgXl, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SP[2] },
+  nextBtnText: { fontSize: TY.base, fontWeight: Font.black, color: OC.white },
   note:        { flexDirection: 'row', gap: SP[2], backgroundColor: 'rgba(0,0,0,0.12)', borderRadius: Radius.sm, padding: SP[3] },
   noteText:    { flex: 1, fontSize: TY.xs, lineHeight: 17 },
+  // Left-rule status treatment (rule 3: status is a rule and text, never
+  // a filled card) -- shared by the pending-edit and rejected banners.
+  statusRule:  { borderLeftWidth: 3, paddingLeft: SP[3], paddingVertical: OS2.xxxs },
+  // "While you wait" next-step rows on the post-submit success screen --
+  // these navigate somewhere real, so they get a bordered row (rule 2:
+  // cards are for things you can tap), unlike the status banners above.
+  nextStepRow:  { flexDirection: 'row', alignItems: 'center', gap: SP[3], padding: SP[3], borderRadius: Radius.md, borderWidth: 0.5 },
+  nextStepIcon: { width: 40, height: 40, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
 });
