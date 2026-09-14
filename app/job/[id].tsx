@@ -25,6 +25,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Spacing } from '../../constants/Layout';
 import { Font, Radius } from '../../constants/theme';
+import { Type as DesignType, Spacing as DesignSpacing, TouchTarget } from '../../lib/design/tokens';
 import { deriveChatId } from '../../lib/messageService';
 import { formatRemaining, formatReopensIn } from '../../lib/time';
 import { supabase } from '../../lib/supabase';
@@ -903,34 +904,32 @@ export default function JobDetailScreen() {
             front, before the customer taps anything, instead of only
             surfacing as a rejected-RPC error on Accept. */}
         {isCustomer && booking.status === 'pending' && offer?.status === 'quoted' && !isOfferExpired && (
-          <View style={[s.offerBanner, { backgroundColor: 'rgba(251,191,36,0.08)', borderColor: 'rgba(251,191,36,0.3)' }]}>
-            <Text style={[s.offerBannerTitle, { color: '#FBBF24' }]}>💰 Quote Received</Text>
-            <Text style={[s.offerBannerSub, { color: C.textSecondary }]}>
+          <View style={s.quoteCallout}>
+            <Text style={s.quoteCalloutTitle}>Quote received</Text>
+            <Text style={[s.quoteCalloutBody, { color: C.textSecondary }]}>
               A contractor quoted{' '}
-              <Text style={{ fontWeight: '900', color: '#FBBF24' }}>${offer.quoted_price?.toLocaleString()}</Text>
+              <Text style={{ fontWeight: '900', color: C.textPrimary }}>${offer.quoted_price?.toLocaleString()}</Text>
               {offer.quote_note ? ` · "${offer.quote_note}"` : ''}
+              {offer.expires_at ? ` · expires in ${formatRemaining(offer.expires_at)}` : ''}
             </Text>
-            {!!offer.expires_at && (
-              <Text style={[s.offerBannerWarning, { color: '#FBBF24', fontWeight: '700' }]}>
-                ⏱ {formatRemaining(offer.expires_at)}
-              </Text>
-            )}
-            <Text style={[s.offerBannerWarning, { color: C.textMuted }]}>
-              ⚠️ You can accept, decline, or counter once. Countering is final.
+            <Text style={[s.quoteCalloutMeta, { color: C.textMuted }]}>
+              You can accept, decline, or counter once. Countering is final.
             </Text>
-            <View style={s.offerBannerActions}>
-              <TouchableOpacity style={[s.offerBtn, s.offerBtnDecline]} onPress={declineQuote}>
-                <Text style={s.offerBtnDeclineText}>Decline</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[s.offerBtn, s.offerBtnCounter]} onPress={() => setCounterModalVisible(true)}>
-                <Text style={s.offerBtnCounterText}>Counter</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[s.offerBtn, s.offerBtnAccept]} onPress={acceptQuote} disabled={offerSaving}>
+            <View style={{ marginTop: DesignSpacing.sm }}>
+              <TouchableOpacity style={s.offerBtnPrimary} onPress={acceptQuote} disabled={offerSaving}>
                 {offerSaving
                   ? <ActivityIndicator color="#fff" size="small" />
                   : <Text style={s.offerBtnAcceptText}>Accept ${offer.quoted_price?.toLocaleString()}</Text>
                 }
               </TouchableOpacity>
+              <View style={s.offerBtnSubrow}>
+                <TouchableOpacity style={s.offerLinkBtn} onPress={() => setCounterModalVisible(true)}>
+                  <Text style={s.offerLinkText}>Counter</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.offerLinkBtn} onPress={declineQuote}>
+                  <Text style={s.offerLinkText}>Decline</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         )}
@@ -1044,14 +1043,14 @@ export default function JobDetailScreen() {
         {/* Cancellation policy */}
         {!['cancelled', 'completed', 'paid', 'approved'].includes(booking.status) && (
           <TouchableOpacity
-            style={[s.noticeCard, { backgroundColor: 'rgba(251,191,36,0.04)', borderColor: 'rgba(251,191,36,0.15)' }]}
+            style={[s.noticeCard, { backgroundColor: C.surface, borderColor: C.border }]}
             onPress={() => setCancelPolicyOpen(p => !p)}
             activeOpacity={0.7}
           >
-            <Ionicons name="information-circle-outline" size={18} color="#FBBF24" />
+            <Ionicons name="information-circle-outline" size={18} color={C.textMuted} />
             <View style={{ flex: 1 }}>
-              <Text style={[s.noticeTitle, { color: '#FBBF24' }]}>
-                Cancellation Policy  {cancelPolicyOpen ? '▲' : '▼'}
+              <Text style={[s.noticeTitle, { color: C.textSecondary }]}>
+                Cancellation policy  {cancelPolicyOpen ? '▲' : '▼'}
               </Text>
               {cancelPolicyOpen ? (
                 <View style={{ marginTop: 6, gap: 5 }}>
@@ -1333,12 +1332,22 @@ function makeStyles(C: any) {
     offerBannerWarning:   { fontSize: 12 },
     offerBannerActions:   { flexDirection: 'row', gap: 8, marginTop: 4 },
     offerBtn:             { flex: 1, paddingVertical: 11, borderRadius: 12, alignItems: 'center' as const, justifyContent: 'center' as const },
-    offerBtnDecline:      { backgroundColor: '#1A1A1A', borderWidth: 1, borderColor: '#2A2A2A' },
-    offerBtnDeclineText:  { fontSize: 13, fontWeight: Font.semibold, color: '#666' },
-    offerBtnCounter:      { backgroundColor: 'rgba(56,189,248,0.12)', borderWidth: 1, borderColor: 'rgba(56,189,248,0.3)' },
-    offerBtnCounterText:  { fontSize: 13, fontWeight: Font.bold, color: '#38BDF8' },
     offerBtnAccept:       { backgroundColor: '#22C55E' },
     offerBtnAcceptText:   { fontSize: 13, fontWeight: Font.bold, color: '#fff' },
+
+    // One-orange-thing quote callout: a rule plus text, not a filled card
+    // (interface-rules spec, rule 3) -- and a single full-width primary
+    // action with the other two responses demoted to text links beneath
+    // (rule: "one primary leads, the rest stay a tap away"), rather than
+    // three equal-weight buttons.
+    quoteCallout:         { borderLeftWidth: 3, borderLeftColor: C.warning, paddingLeft: Spacing.sm, paddingVertical: 2 },
+    quoteCalloutTitle:    { fontSize: 15, fontWeight: Font.bold, color: C.warning, marginBottom: 3 },
+    quoteCalloutBody:     { fontSize: 13, lineHeight: 19 },
+    quoteCalloutMeta:     { fontSize: 12, marginTop: 4 },
+    offerBtnPrimary:      { width: '100%', minHeight: TouchTarget.min, borderRadius: Radius.md, alignItems: 'center' as const, justifyContent: 'center' as const, backgroundColor: C.orange },
+    offerBtnSubrow:       { flexDirection: 'row', justifyContent: 'center' as const, gap: DesignSpacing.xl, marginTop: DesignSpacing.sm },
+    offerLinkBtn:         { paddingVertical: Spacing.sm, paddingHorizontal: Spacing.xs, minHeight: TouchTarget.min, justifyContent: 'center' as const },
+    offerLinkText:        { fontSize: DesignType.label.fontSize, fontWeight: DesignType.label.fontWeight, color: C.textSecondary },
 
     modalOverlay:     { flex: 1, justifyContent: 'flex-end' as const },
     modalBackdrop:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)' },
