@@ -361,6 +361,7 @@ function TradeChipRow({ active, onSelect, C }: { active: string; onSelect: (dbVa
       <TouchableOpacity
         style={[s.tradeChip, { borderColor: active === 'All' ? C.orange : C.border, backgroundColor: active === 'All' ? `${C.orange}18` : 'transparent' }]}
         onPress={() => onSelect('All')}
+        hitSlop={{ top: 8, bottom: 8 }}
       >
         <Text style={[s.tradeChipText, { color: active === 'All' ? C.orange : C.textSecondary }]}>All</Text>
       </TouchableOpacity>
@@ -371,6 +372,7 @@ function TradeChipRow({ active, onSelect, C }: { active: string; onSelect: (dbVa
             key={t.id}
             style={[s.tradeChip, { borderColor: isActive ? t.color : C.border, backgroundColor: isActive ? `${t.color}18` : 'transparent' }]}
             onPress={() => onSelect(t.dbValue!)}
+            hitSlop={{ top: 8, bottom: 8 }}
           >
             <View style={[s.tradeChipDot, { backgroundColor: t.color }]} />
             <Text style={[s.tradeChipText, { color: isActive ? t.color : C.textSecondary }]}>{t.label}</Text>
@@ -768,7 +770,7 @@ export default function MapScreen() {
           <Text style={s.emptySub}>
             Allow location access so we can find {isContractor ? 'jobs' : 'contractors'} near you.
           </Text>
-          <TouchableOpacity style={[s.emptyBtn, { backgroundColor: C.orange }]} onPress={getLocation}>
+          <TouchableOpacity style={[s.emptyBtn, { backgroundColor: C.orange }]} onPress={getLocation} hitSlop={{ top: 4, bottom: 4 }}>
             <Text style={s.emptyBtnText}>Enable Location</Text>
           </TouchableOpacity>
         </View>
@@ -893,6 +895,7 @@ export default function MapScreen() {
           style={[s.radiusPill, { marginTop: 8, marginRight: 16 }]}
           activeOpacity={0.85}
           onPress={() => setRadiusPickerOpen(true)}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
           <BlurView intensity={40} tint="dark" style={s.radiusPillInner}>
             <Text style={s.radiusPillText}>{radius} mi</Text>
@@ -931,6 +934,7 @@ export default function MapScreen() {
           <TouchableOpacity
             style={[s.sheetPeekIcon, { backgroundColor: `${C.orange}18` }]}
             onPress={() => bottomSheetRef.current?.snapToIndex(sheetIndex >= 1 ? 0 : 1)}
+            hitSlop={{ top: 7, bottom: 7, left: 7, right: 7 }}
           >
             <Ionicons name={sheetIndex >= 1 ? 'chevron-down' : 'chevron-up'} size={18} color={C.orange} />
           </TouchableOpacity>
@@ -950,6 +954,7 @@ export default function MapScreen() {
                   key={mode}
                   style={[s.sortChip, { borderColor: active ? C.orange : C.border, backgroundColor: active ? `${C.orange}18` : 'transparent' }]}
                   onPress={() => setSortMode(mode)}
+                  hitSlop={{ top: 11, bottom: 11 }}
                 >
                   <Text style={[s.sortChipText, { color: active ? C.orange : C.textSecondary }]}>
                     {mode === 'distance' ? 'Distance' : mode === 'price' ? 'Price' : 'Rating'}
@@ -981,6 +986,7 @@ export default function MapScreen() {
                   <TouchableOpacity
                     style={[s.guestSignInBtn, { backgroundColor: C.orange }]}
                     onPress={() => router.push('/login')}
+                    hitSlop={{ top: 8, bottom: 8 }}
                   >
                     <Text style={s.emptyBtnText}>Sign In</Text>
                   </TouchableOpacity>
@@ -997,6 +1003,7 @@ export default function MapScreen() {
                     <TouchableOpacity
                       style={[s.emptyBtn, { backgroundColor: C.orange }]}
                       onPress={() => router.push('/login')}
+                      hitSlop={{ top: 4, bottom: 4 }}
                     >
                       <Text style={s.emptyBtnText}>Sign In</Text>
                     </TouchableOpacity>

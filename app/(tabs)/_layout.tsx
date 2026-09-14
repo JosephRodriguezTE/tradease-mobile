@@ -93,6 +93,11 @@ export default function TabsLayout() {
           height: 66 + insets.bottom,
           paddingBottom: 12 + insets.bottom,
           paddingTop: 12,
+          // Up to 5 tabs render for a contractor session (Home, Map,
+          // Jobs, Messages, Profile). Without this, the outer tabs sit
+          // flush against the screen edge/rounded corners on edge-to-
+          // edge phones -- this is the overlap seen on-device.
+          paddingHorizontal: Math.max(insets.left, insets.right, 8),
           shadowColor: Colors.orange,
           shadowOffset: { width: 0, height: -4 },
           shadowOpacity: 0.15,
