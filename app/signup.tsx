@@ -21,6 +21,7 @@ import { Colors, FontFamily, Shadows } from '../constants/theme';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { ALL_TRADES, TRADE_ICONS } from '../lib/tradeJobs';
+import { OnboardingColors as OC, OnboardingType as OT, OnboardingSpacing as OS } from '@/lib/design/onboarding-tokens';
 
 const { width } = Dimensions.get('window');
 
@@ -52,7 +53,7 @@ function FocusInput({
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          placeholderTextColor="#3F3F3F"
+          placeholderTextColor={OC.placeholder}
           secureTextEntry={secureTextEntry}
           keyboardType={keyboardType ?? 'default'}
           autoCapitalize={autoCapitalize ?? 'none'}
@@ -123,9 +124,9 @@ function ToggleRow({ icon, label, sub, value, onValueChange }: any) {
       <Switch
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ false: '#2A2A2A', true: Colors.orange }}
-        thumbColor="#FFFFFF"
-        ios_backgroundColor="#2A2A2A"
+        trackColor={{ false: OC.disabledBorder, true: Colors.orange }}
+        thumbColor={OC.white}
+        ios_backgroundColor={OC.disabledBorder}
       />
     </View>
   );
@@ -140,12 +141,12 @@ function PasswordStrength({ password }: { password: string }) {
   if (/[0-9]/.test(password)) score++;
   if (/[^A-Za-z0-9]/.test(password)) score++;
   const labels = ['Too Short', 'Weak', 'Fair', 'Good', 'Strong'];
-  const colors = ['#EF4444', '#EF4444', '#F59E0B', '#22C55E', '#22C55E'];
+  const colors = [OC.error, OC.error, OC.warning, OC.success, OC.success];
   return (
     <View style={strengthStyles.wrap}>
       <View style={strengthStyles.bars}>
         {[1, 2, 3, 4].map((i) => (
-          <View key={i} style={[strengthStyles.bar, { backgroundColor: i <= score ? colors[score] : '#222' }]} />
+          <View key={i} style={[strengthStyles.bar, { backgroundColor: i <= score ? colors[score] : OC.surfaceAlt }]} />
         ))}
       </View>
       <Text style={[strengthStyles.label, { color: colors[score] }]}>{labels[score]}</Text>
@@ -462,7 +463,7 @@ export default function SignupScreen() {
             {googleMode && (
               <View style={styles.googleBanner}>
                 <View style={styles.googleBannerIcon}>
-                  <Ionicons name="checkmark" size={16} color="#0A0A0A" />
+                  <Ionicons name="checkmark" size={16} color={OC.bg} />
                 </View>
                 <View style={styles.googleBannerInfo}>
                   <Text style={styles.googleBannerTitle}>Connected with Google</Text>
@@ -478,7 +479,7 @@ export default function SignupScreen() {
                 onPress={() => setRole('customer')}
                 activeOpacity={0.85}
               >
-                <Ionicons name="search-outline" size={22} color={role === 'customer' ? Colors.orange : '#888'} />
+                <Ionicons name="search-outline" size={22} color={role === 'customer' ? Colors.orange : OC.iconMuted} />
                 <View>
                   <Text style={[styles.roleLabel, role === 'customer' && styles.roleLabelActive]}>Customer</Text>
                   <Text style={styles.roleSub}>I need a contractor</Text>
@@ -489,7 +490,7 @@ export default function SignupScreen() {
                 onPress={() => setRole('contractor')}
                 activeOpacity={0.85}
               >
-                <Ionicons name="construct-outline" size={22} color={role === 'contractor' ? Colors.orange : '#888'} />
+                <Ionicons name="construct-outline" size={22} color={role === 'contractor' ? Colors.orange : OC.iconMuted} />
                 <View>
                   <Text style={[styles.roleLabel, role === 'contractor' && styles.roleLabelActive]}>Contractor</Text>
                   <Text style={styles.roleSub}>I do the work</Text>
@@ -545,7 +546,7 @@ export default function SignupScreen() {
                     autoComplete="new-password"
                     rightElement={
                       <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-                        <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={18} color="#888" />
+                        <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={18} color={OC.iconMuted} />
                       </TouchableOpacity>
                     }
                   />
@@ -559,7 +560,7 @@ export default function SignupScreen() {
                     secureTextEntry={!showConfirm}
                     rightElement={
                       <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)}>
-                        <Ionicons name={showConfirm ? 'eye-off-outline' : 'eye-outline'} size={18} color="#888" />
+                        <Ionicons name={showConfirm ? 'eye-off-outline' : 'eye-outline'} size={18} color={OC.iconMuted} />
                       </TouchableOpacity>
                     }
                   />
@@ -628,7 +629,7 @@ export default function SignupScreen() {
 
                 <Text style={styles.sectionLabel}>LICENSE INFO · OPTIONAL</Text>
                 <View style={styles.licenseNotice}>
-                  <Ionicons name="ribbon-outline" size={16} color="#888" />
+                  <Ionicons name="ribbon-outline" size={16} color={OC.iconMuted} />
                   <Text style={styles.licenseNoticeText}>
                     If your trade requires a license in your state/county, add it here for verification. Skip if not applicable.
                   </Text>
@@ -647,10 +648,10 @@ export default function SignupScreen() {
                       style={[inputStyles.box, { borderColor: expiryMonth > 0 ? Colors.orange : 'rgba(255,255,255,0.08)', marginBottom: showExpiryPicker ? 8 : 0 }]}
                       onPress={() => setShowExpiryPicker(v => !v)}
                     >
-                      <Text style={[inputStyles.input, { paddingVertical: 0, color: expiryMonth > 0 ? Colors.white : '#3F3F3F' }]}>
+                      <Text style={[inputStyles.input, { paddingVertical: OS.none, color: expiryMonth > 0 ? Colors.white : OC.placeholder }]}>
                         {expiryMonth > 0 ? `${MONTHS[expiryMonth - 1]} ${expiryYear}` : 'Select expiry date'}
                       </Text>
-                      <Ionicons name="calendar-outline" size={16} color="#888" />
+                      <Ionicons name="calendar-outline" size={16} color={OC.iconMuted} />
                     </TouchableOpacity>
                     {showExpiryPicker && (
                       <MonthYearPicker
@@ -718,7 +719,7 @@ export default function SignupScreen() {
             {/* Terms */}
             <TouchableOpacity style={styles.termsRow} activeOpacity={0.8} onPress={() => setAgreed(!agreed)}>
               <View style={[styles.checkbox, agreed && styles.checkboxActive]}>
-                {agreed && <Ionicons name="checkmark" size={12} color="#0A0A0A" />}
+                {agreed && <Ionicons name="checkmark" size={12} color={OC.bg} />}
               </View>
               <Text style={styles.termsText}>
                 I agree to the <Text style={styles.termsLink}>Terms of Service</Text>{' '}
@@ -737,19 +738,19 @@ export default function SignupScreen() {
                 >
                   {canCreateContractor ? (
                     <LinearGradient
-                      colors={['#FF7A1F', '#FF6200']}
+                      colors={[OC.gradientStart, OC.orange]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={styles.submitGradient}
                     >
                       {loading ? (
-                        <ActivityIndicator color="#0A0A0A" />
+                        <ActivityIndicator color={OC.bg} />
                       ) : (
                         <>
                           <Text style={styles.submitText}>
                             {googleMode ? 'Complete Contractor Profile' : 'Create Contractor Account'}
                           </Text>
-                          <Ionicons name="arrow-forward" size={18} color="#0A0A0A" />
+                          <Ionicons name="arrow-forward" size={18} color={OC.bg} />
                         </>
                       )}
                     </LinearGradient>
@@ -770,19 +771,19 @@ export default function SignupScreen() {
                 disabled={loading}
               >
                 <LinearGradient
-                  colors={['#FF7A1F', '#FF6200']}
+                  colors={[OC.gradientStart, OC.orange]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.submitGradient}
                 >
                   {loading ? (
-                    <ActivityIndicator color="#0A0A0A" />
+                    <ActivityIndicator color={OC.bg} />
                   ) : (
                     <>
                       <Text style={styles.submitText}>
                         {googleMode ? 'Complete Customer Profile' : 'Create Customer Account'}
                       </Text>
-                      <Ionicons name="arrow-forward" size={18} color="#0A0A0A" />
+                      <Ionicons name="arrow-forward" size={18} color={OC.bg} />
                     </>
                   )}
                 </LinearGradient>
@@ -798,7 +799,7 @@ export default function SignupScreen() {
             )}
 
             <View style={styles.securityNote}>
-              <Ionicons name="lock-closed-outline" size={12} color="#555" />
+              <Ionicons name="lock-closed-outline" size={12} color={OC.textMuted} />
               <Text style={styles.securityText}>Your information is securely encrypted.</Text>
             </View>
           </Animated.View>
@@ -812,7 +813,7 @@ export default function SignupScreen() {
 // STYLES
 // ═══════════════════════════════════════════════════════
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0A0A0A' },
+  container: { flex: 1, backgroundColor: OC.bg },
   topSafe: { backgroundColor: 'transparent' },
   flex: { flex: 1 },
 
@@ -827,103 +828,103 @@ const styles = StyleSheet.create({
 
   topBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 10,
+    paddingHorizontal: OS.lgXl, paddingVertical: OS.md,
   },
   backBtn: {
     width: 40, height: 40, borderRadius: 12,
     backgroundColor: 'rgba(20,20,20,0.85)',
-    borderWidth: 1, borderColor: '#222',
+    borderWidth: 1, borderColor: OC.surfaceAlt,
     alignItems: 'center', justifyContent: 'center',
   },
-  backArrow: { fontSize: 18, color: Colors.white, fontFamily: FontFamily.bold },
+  backArrow: { ...OT.ctaIcon, color: Colors.white, fontFamily: FontFamily.bold },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   brandHammer: { width: 28, height: 28 },
-  brandWord: { fontSize: 18, fontWeight: '800', color: '#F0F0F0', letterSpacing: -0.4 },
+  brandWord: { ...OT.ctaIcon, fontWeight: '800', color: OC.textPrimary, letterSpacing: -0.4 },
 
-  scroll: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40 },
+  scroll: { paddingHorizontal: OS.xl, paddingTop: OS.lgXl, paddingBottom: OS.xxl },
   content: { gap: 16 },
 
   hero: { gap: 6 },
   heroTitle: {
-    fontSize: 28, fontFamily: FontFamily.black,
+    ...OT.heroTitle,
     color: Colors.white, letterSpacing: -0.6, lineHeight: 34,
   },
-  heroSub: { fontSize: 14, fontFamily: FontFamily.medium, color: Colors.textSecondary, lineHeight: 20 },
+  heroSub: { ...OT.heroSub, color: Colors.textSecondary, lineHeight: 20 },
 
   googleBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: 'rgba(34,197,94,0.08)',
     borderRadius: 16, borderWidth: 1, borderColor: 'rgba(34,197,94,0.3)',
-    padding: 14,
+    padding: OS.lg,
   },
   googleBannerIcon: {
-    backgroundColor: '#22C55E', width: 26, height: 26,
+    backgroundColor: OC.success, width: 26, height: 26,
     borderRadius: 13, alignItems: 'center', justifyContent: 'center',
   },
   googleBannerInfo: { flex: 1, gap: 2 },
-  googleBannerTitle: { fontSize: 13, fontFamily: FontFamily.bold, color: '#22C55E' },
-  googleBannerSub: { fontSize: 12, fontFamily: FontFamily.medium, color: '#16A34A' },
+  googleBannerTitle: { ...OT.bannerTitle, color: OC.success },
+  googleBannerSub: { ...OT.bannerSub, color: OC.googleTextDark },
 
   roleToggle: { flexDirection: 'row', gap: 10, marginTop: 4 },
   roleOption: {
     flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: 'rgba(20,20,20,0.85)',
-    borderRadius: 16, borderWidth: 1.5, borderColor: '#1F1F1F',
-    padding: 12,
+    borderRadius: 16, borderWidth: 1.5, borderColor: OC.borderSubtle,
+    padding: OS.mdLg,
   },
   roleOptionActive: {
     borderColor: Colors.orange,
     backgroundColor: 'rgba(255,98,0,0.06)',
   },
-  roleLabel: { fontSize: 13, fontFamily: FontFamily.bold, color: '#888', marginBottom: 2 },
+  roleLabel: { ...OT.roleLabel, color: OC.iconMuted, marginBottom: 2 },
   roleLabelActive: { color: Colors.white },
-  roleSub: { fontSize: 10, fontFamily: FontFamily.medium, color: '#555' },
+  roleSub: { ...OT.roleSub, color: OC.textMuted },
 
   sectionLabel: {
-    fontSize: 11, fontFamily: FontFamily.extraBold,
-    color: '#555', letterSpacing: 1.8, marginTop: 8,
+    ...OT.sectionLabel,
+    color: OC.textMuted, letterSpacing: 1.8, marginTop: 8,
   },
   section: {
     backgroundColor: 'rgba(20,20,20,0.85)',
-    borderRadius: 18, borderWidth: 1, borderColor: '#1E1E1E',
-    overflow: 'hidden', paddingVertical: 6,
+    borderRadius: 18, borderWidth: 1, borderColor: OC.borderSubtle,
+    overflow: 'hidden', paddingVertical: OS.xs,
   },
-  divider: { height: 1, backgroundColor: '#1E1E1E', marginHorizontal: 16 },
+  divider: { height: 1, backgroundColor: OC.borderSubtle, marginHorizontal: 16 },
 
-  tradesRow: { gap: 8, paddingVertical: 4, paddingHorizontal: 16 },
+  tradesRow: { gap: 8, paddingVertical: OS.xxs, paddingHorizontal: OS.lgXl },
   tradeChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 14, paddingVertical: 9,
-    borderRadius: 100, backgroundColor: '#1A1A1A',
-    borderWidth: 1.5, borderColor: '#252525',
+    paddingHorizontal: OS.lg, paddingVertical: OS.smMd,
+    borderRadius: 100, backgroundColor: OC.surface,
+    borderWidth: 1.5, borderColor: OC.chipBorder,
   },
   tradeChipActive: { backgroundColor: 'rgba(255,98,0,0.15)', borderColor: Colors.orange },
-  tradeChipIcon: { fontSize: 14 },
-  tradeChipText: { fontSize: 12, fontFamily: FontFamily.bold, color: '#888' },
+  tradeChipIcon: OT.chipIcon,
+  tradeChipText: { ...OT.chipText, color: OC.iconMuted },
   tradeChipTextActive: { color: Colors.orange },
 
   licenseNotice: {
     flexDirection: 'row', gap: 10,
     backgroundColor: 'rgba(245,158,11,0.06)',
     borderRadius: 12, borderWidth: 1, borderColor: 'rgba(245,158,11,0.2)',
-    padding: 12,
+    padding: OS.mdLg,
   },
-  licenseNoticeIcon: { fontSize: 16 },
+  licenseNoticeIcon: OT.iconMd,
   licenseNoticeText: {
-    flex: 1, fontSize: 12, fontFamily: FontFamily.medium,
-    color: '#F59E0B', lineHeight: 17,
+    flex: 1, ...OT.bodyText,
+    color: OC.warning, lineHeight: 17,
   },
 
-  eye: { fontSize: 16 },
+  eye: OT.iconMd,
 
-  termsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 4 },
+  termsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: OS.xxs },
   checkbox: {
-    width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, borderColor: '#333',
-    backgroundColor: '#141414', alignItems: 'center', justifyContent: 'center', marginTop: 1,
+    width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, borderColor: OC.checkboxBorder,
+    backgroundColor: OC.disabledBg, alignItems: 'center', justifyContent: 'center', marginTop: 1,
   },
   checkboxActive: { backgroundColor: Colors.orange, borderColor: Colors.orange },
-  checkmark: { fontSize: 12, color: '#0A0A0A', fontFamily: FontFamily.black },
-  termsText: { flex: 1, fontSize: 12, fontFamily: FontFamily.medium, color: '#888', lineHeight: 18 },
+  checkmark: { ...OT.checkmarkText, color: OC.bg },
+  termsText: { flex: 1, ...OT.bodyText, color: OC.iconMuted, lineHeight: 18 },
   termsLink: { color: Colors.orange, fontFamily: FontFamily.bold },
 
   submitBtn: { borderRadius: 18, overflow: 'hidden', marginTop: 4, ...Shadows.glow },
@@ -931,97 +932,97 @@ const styles = StyleSheet.create({
     height: 58, flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center', gap: 10,
   },
-  submitText: { fontSize: 16, fontFamily: FontFamily.black, color: '#0A0A0A', letterSpacing: 0.3 },
-  submitArrow: { fontSize: 18, color: '#0A0A0A', fontFamily: FontFamily.black },
+  submitText: { ...OT.ctaText, color: OC.bg, letterSpacing: 0.3 },
+  submitArrow: { ...OT.ctaIcon, color: OC.bg, fontFamily: FontFamily.black },
 
-  signInRow: { alignItems: 'center', paddingVertical: 4 },
-  signInText: { fontSize: 13, fontFamily: FontFamily.medium, color: '#888' },
+  signInRow: { alignItems: 'center', paddingVertical: OS.xxs },
+  signInText: { ...OT.linkText, color: OC.iconMuted },
   signInLink: { color: Colors.orange, fontFamily: FontFamily.bold },
 
   securityNote: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, paddingTop: 4,
+    gap: 6, paddingTop: OS.xxs,
   },
-  securityIcon: { fontSize: 11 },
-  securityText: { fontSize: 11, fontFamily: FontFamily.medium, color: '#666' },
+  securityIcon: OT.captionText,
+  securityText: { ...OT.captionText, color: OC.captionText },
 
   verifyBtnDisabled: {
     minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#141414', borderWidth: 1, borderColor: '#2A2A2A', borderRadius: 18,
-    paddingHorizontal: 16, paddingVertical: 12,
+    backgroundColor: OC.disabledBg, borderWidth: 1, borderColor: OC.disabledBorder, borderRadius: 18,
+    paddingHorizontal: OS.lgXl, paddingVertical: OS.mdLg,
   },
-  verifyBtnDisabledText: { fontSize: 14, fontFamily: FontFamily.bold, color: '#444', letterSpacing: 0.2, textAlign: 'center' },
-  verifyUnlockNote: { fontSize: 11, fontFamily: FontFamily.medium, color: '#555', textAlign: 'center', lineHeight: 16 },
+  verifyBtnDisabledText: { ...OT.disabledCta, color: OC.disabledText, letterSpacing: 0.2, textAlign: 'center' },
+  verifyUnlockNote: { ...OT.captionText, color: OC.textMuted, textAlign: 'center', lineHeight: 16 },
 });
 
 const inputStyles = StyleSheet.create({
-  wrap: { paddingHorizontal: 16, paddingVertical: 10, gap: 7 },
+  wrap: { paddingHorizontal: OS.lgXl, paddingVertical: OS.md, gap: 7 },
   label: {
-    fontSize: 11, fontFamily: FontFamily.bold,
-    color: '#777', letterSpacing: 0.6, textTransform: 'uppercase',
+    ...OT.fieldLabel,
+    color: OC.labelText, letterSpacing: 0.6, textTransform: 'uppercase',
   },
   req: { color: Colors.orange },
   box: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#0F0F0F',
+    backgroundColor: OC.inputBg,
     borderRadius: 12, borderWidth: 1.5,
-    paddingHorizontal: 14, minHeight: 50,
+    paddingHorizontal: OS.lg, minHeight: 50,
   },
   boxDisabled: { backgroundColor: 'rgba(34,197,94,0.04)', borderColor: 'rgba(34,197,94,0.2)' },
   input: {
-    flex: 1, fontSize: 15, fontFamily: FontFamily.medium,
-    color: Colors.white, paddingVertical: 12,
+    flex: 1, ...OT.fieldInput,
+    color: Colors.white, paddingVertical: OS.mdLg,
   },
-  inputDisabled: { color: '#888' },
-  right: { paddingLeft: 10 },
-  hint: { fontSize: 11, fontFamily: FontFamily.medium, color: '#555' },
+  inputDisabled: { color: OC.iconMuted },
+  right: { paddingLeft: OS.md },
+  hint: { ...OT.fieldHint, color: OC.textMuted },
 });
 
 const pickerStyles = StyleSheet.create({
   box: {
-    backgroundColor: '#0F0F0F', borderRadius: 12, borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.08)', padding: 14, marginTop: -2, marginBottom: 6,
+    backgroundColor: OC.inputBg, borderRadius: 12, borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.08)', padding: OS.lg, marginTop: -2, marginBottom: 6,
   },
   yearRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 12, paddingHorizontal: 4,
+    marginBottom: 12, paddingHorizontal: OS.xxs,
   },
-  yearBtn: { padding: 8 },
-  yearArrow: { fontSize: 20, fontFamily: FontFamily.bold, color: Colors.white },
-  yearText: { fontSize: 16, fontFamily: FontFamily.black, color: Colors.white },
+  yearBtn: { padding: OS.sm },
+  yearArrow: { ...OT.pickerArrow, color: Colors.white },
+  yearText: { ...OT.pickerYear, color: Colors.white },
   monthGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   monthBtn: {
-    width: '30%', paddingVertical: 12, borderRadius: 10, alignItems: 'center',
-    backgroundColor: '#161616', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    width: '30%', paddingVertical: OS.mdLg, borderRadius: 10, alignItems: 'center',
+    backgroundColor: OC.pickerCellBg, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
   },
   monthBtnActive: { backgroundColor: Colors.orange, borderColor: Colors.orange },
   monthBtnPast: { opacity: 0.3 },
-  monthText: { fontSize: 13, fontFamily: FontFamily.semibold, color: Colors.white },
-  monthTextActive: { color: '#0A0A0A' },
+  monthText: { ...OT.pickerMonth, color: Colors.white },
+  monthTextActive: { color: OC.bg },
 });
 
 const toggleStyles = StyleSheet.create({
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    paddingHorizontal: 16, paddingVertical: 12,
+    paddingHorizontal: OS.lgXl, paddingVertical: OS.mdLg,
   },
   iconBox: {
     width: 38, height: 38, borderRadius: 10,
-    backgroundColor: '#1E1E1E',
+    backgroundColor: OC.borderSubtle,
     alignItems: 'center', justifyContent: 'center',
   },
-  icon: { fontSize: 18 },
+  icon: OT.ctaIcon,
   info: { flex: 1 },
-  label: { fontSize: 14, fontFamily: FontFamily.semibold, color: Colors.white, marginBottom: 2 },
-  sub: { fontSize: 11, fontFamily: FontFamily.medium, color: '#666', lineHeight: 16 },
+  label: { ...OT.toggleLabel, color: Colors.white, marginBottom: 2 },
+  sub: { ...OT.toggleSub, color: OC.captionText, lineHeight: 16 },
 });
 
 const strengthStyles = StyleSheet.create({
   wrap: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingHorizontal: 16, marginTop: -4, marginBottom: 6,
+    paddingHorizontal: OS.lgXl, marginTop: -4, marginBottom: 6,
   },
   bars: { flex: 1, flexDirection: 'row', gap: 4 },
   bar: { flex: 1, height: 3, borderRadius: 2 },
-  label: { fontSize: 11, fontFamily: FontFamily.bold, minWidth: 60 },
+  label: { ...OT.fieldLabel, minWidth: 60 },
 });
