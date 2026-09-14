@@ -41,11 +41,25 @@ export default function CompanySetupScreen() {
     if (!city.trim() || !state) { Alert.alert('Required', 'Enter your city and state.'); return; }
 
     setSaving(true);
+
+    // Writes the trade via contractor_trades, not a direct trade_type
+    // write — contractor_trades_maintain() (the Phase 0 trigger) is the
+    // only thing that sets trade_type now. This screen is single-select,
+    // so the one chosen trade is trivially primary.
+    const { error: tradeError } = await supabase.rpc('save_contractor_trades', {
+      p_trade_ids: [trade],
+      p_primary_trade_id: trade,
+    });
+    if (tradeError) {
+      setSaving(false);
+      Alert.alert('Error', tradeError.message || 'Could not save your trade. Try again.');
+      return;
+    }
+
     const { error } = await supabase
       .from('contractors')
       .update({
         company_name: companyName.trim(),
-        trade_type: trade,
         business_city: city.trim(),
         business_state: state,
         location: `${city.trim()}, ${state}`,

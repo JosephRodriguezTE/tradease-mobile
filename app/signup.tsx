@@ -316,7 +316,12 @@ export default function SignupScreen() {
           email: email.trim().toLowerCase(),
           legal_name: legalName.trim(),
           company_name: businessName.trim(),
-          trade_type: tradeCategory,
+          // trade_type is no longer set here — contractor_trades_maintain()
+          // owns it exclusively, recomputed once save_contractor_trades()
+          // below actually lands a row. Left unset (null) rather than
+          // written directly, so a failed trade save below is honestly
+          // reflected instead of showing a trade_type with no matching
+          // contractor_trades row behind it.
           phone: phone.trim(),
           address: businessAddress.trim() || null,
           service_area: serviceArea.trim() || null,
@@ -333,7 +338,37 @@ export default function SignupScreen() {
           plan: 'free',
           verification_status: 'unverified',
         });
-        if (insErr) console.log('contractors insert error:', insErr);
+        if (insErr) {
+          console.log('contractors insert error:', insErr);
+        } else {
+          // save_contractor_trades() requires the contractor row to
+          // already exist (contractor_trades.contractor_id is FK'd to
+          // contractors.id) — this can only run after the insert above
+          // succeeds, never in parallel with it. One retry for a
+          // transient network blip; if it still fails, the account is
+          // real and usable, so this doesn't block signup — but a
+          // contractor with no trades matches no jobs and shows up
+          // nowhere, so it's surfaced to them directly rather than only
+          // logged, and contractors_missing_trades (the admin backstop)
+          // catches it if they never revisit it.
+          let { error: tradeErr } = await supabase.rpc('save_contractor_trades', {
+            p_trade_ids: [tradeCategory],
+            p_primary_trade_id: tradeCategory,
+          });
+          if (tradeErr) {
+            ({ error: tradeErr } = await supabase.rpc('save_contractor_trades', {
+              p_trade_ids: [tradeCategory],
+              p_primary_trade_id: tradeCategory,
+            }));
+          }
+          if (tradeErr) {
+            console.log('save_contractor_trades error:', tradeErr);
+            Alert.alert(
+              'Trade Not Saved',
+              "Your account was created, but we couldn't save your trade type. Add it from your company profile before customers can find you."
+            );
+          }
+        }
       }
 
       // Sync auth metadata

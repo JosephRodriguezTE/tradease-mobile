@@ -22,12 +22,14 @@ const TY = { xs:11,sm:13,base:15,md:17,lg:20,xl:24 } as const;
 const FW = { regular:'400' as const, medium:'500' as const, semibold:'600' as const, bold:'700' as const, black:'800' as const };
 
 
-const TRADE_TYPE_LIST = [
-  'Plumbing','Electrical','HVAC','Carpentry','Roofing','Painting',
-  'Landscaping','General Contracting','Masonry','Flooring','Drywall','Handyman',
-];
-
 const PHOTO_LIMITS: Record<string, number> = { free: 5, leads: 10, pro: 15 };
+
+interface TradeOption {
+  id: string;
+  label: string;
+  color: string;
+  sort_order: number;
+}
 
 type Photo = { uri: string; caption: string; uploaded?: boolean; url?: string };
 
@@ -89,7 +91,9 @@ export default function CompanyProfileScreen() {
   const [website,          setWebsite]          = useState('');
   const [languages,        setLanguages]        = useState('English');
   const [specializations,  setSpecializations]  = useState<string[]>([]);
+  const [trades,           setTrades]           = useState<TradeOption[]>([]);
   const [selectedTrades,   setSelectedTrades]   = useState<string[]>([]);
+  const [primaryTrade,     setPrimaryTrade]     = useState<string | null>(null);
   const [showAllSpecs,     setShowAllSpecs]     = useState(false);
   const [customSpecInput,  setCustomSpecInput]  = useState('');
   const [photos,           setPhotos]           = useState<Photo[]>([]);
@@ -100,12 +104,24 @@ export default function CompanyProfileScreen() {
 
   // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
+    // Canonical trade list — the trades table, not a local copy. This is
+    // the one place a chip row like this should read from now: the same
+    // reference table contractors_nearby/get_ranked_contractors join
+    // against, not a second, independently-typed list that can drift
+    // (the old TRADE_TYPE_LIST had 12 entries, 4 that don't exist in the
+    // canonical 9 — General Contracting, Masonry, Flooring, Drywall).
+    supabase
+      .from('trades')
+      .select('id,label,color,sort_order')
+      .order('sort_order')
+      .then(({ data }) => setTrades((data ?? []) as TradeOption[]));
+
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       const { data } = await supabase
         .from('contractors')
-        .select('*')
+        .select('*, contractor_trades(trade_id, is_primary)')
         .eq('id', user.id)
         .single();
       if (data) {
@@ -118,11 +134,9 @@ export default function CompanyProfileScreen() {
         setWebsite(data.website ?? '');
         setLanguages(data.languages ?? 'English');
         setSpecializations(data.specializations ?? []);
-        setSelectedTrades(
-          data.trade_type
-            ? data.trade_type.split(',').map((t: string) => t.trim()).filter(Boolean)
-            : []
-        );
+        const tradeRows = (data.contractor_trades ?? []) as { trade_id: string; is_primary: boolean }[];
+        setSelectedTrades(tradeRows.map(r => r.trade_id));
+        setPrimaryTrade(tradeRows.find(r => r.is_primary)?.trade_id ?? tradeRows[0]?.trade_id ?? null);
         setPhotos((data.portfolio_photos ?? []) as Photo[]);
         setBannerUri(data.banner_url ?? '');
         setAvatarUri(data.avatar_url ?? '');
@@ -177,10 +191,26 @@ export default function CompanyProfileScreen() {
     setPhotos(prev => prev.map((p, i) => i === index ? { ...p, caption } : p));
   }
 
-  function toggleTrade(trade: string) {
-    setSelectedTrades(prev =>
-      prev.includes(trade) ? prev.filter(t => t !== trade) : [...prev, trade]
-    );
+  function toggleTrade(tradeId: string) {
+    setSelectedTrades(prev => {
+      const next = prev.includes(tradeId) ? prev.filter(t => t !== tradeId) : [...prev, tradeId];
+      // Mirrors contractor_trades_maintain()'s own promotion rule
+      // (lowest sort_order among remaining rows) so the star badge never
+      // shows a stale primary before save — deselecting the current
+      // primary while others remain promotes the next one immediately,
+      // the same choice the trigger will make server-side.
+      setPrimaryTrade(current => {
+        if (next.length === 0) return null;
+        if (current && next.includes(current)) return current;
+        const bySort = [...next].sort((a, b) => {
+          const sa = trades.find(t => t.id === a)?.sort_order ?? 999;
+          const sb = trades.find(t => t.id === b)?.sort_order ?? 999;
+          return sa - sb;
+        });
+        return bySort[0] ?? null;
+      });
+      return next;
+    });
   }
 
   function toggleSpec(spec: string) {
@@ -200,11 +230,28 @@ export default function CompanyProfileScreen() {
   async function handleSave() {
     if (!companyName.trim()) { Alert.alert('Required', 'Company name is required.'); return; }
     if (!description.trim()) { Alert.alert('Required', 'About section is required.'); return; }
+    // Zero trades means zero job matches and zero visibility anywhere in
+    // the app — a contractor account nothing can ever find. Blocked, not
+    // just warned, same as the field's existing "*" required marking
+    // already implied but never actually enforced.
+    if (selectedTrades.length === 0) { Alert.alert('Required', 'Select at least one trade.'); return; }
     if (specializations.length === 0) { Alert.alert('Required', 'Select at least one specialization.'); return; }
 
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSaving(false); return; }
+
+    // Atomic replace, server-side — see save_contractor_trades() for why
+    // this isn't a client-side delete-then-insert sequence.
+    const { error: tradesError } = await supabase.rpc('save_contractor_trades', {
+      p_trade_ids: selectedTrades,
+      p_primary_trade_id: primaryTrade,
+    });
+    if (tradesError) {
+      setSaving(false);
+      Alert.alert('Error', tradesError.message || 'Could not save trades. Try again.');
+      return;
+    }
 
     // Upload banner & avatar if new local URIs
     let finalBanner = bannerUri;
@@ -237,7 +284,9 @@ export default function CompanyProfileScreen() {
       website:           website.trim(),
       languages:         languages.trim(),
       specializations,
-      trade_type:        selectedTrades.join(', '),
+      // trade_type is no longer written here — contractor_trades_maintain()
+      // (the Phase 0 trigger) now owns it exclusively, recomputed from
+      // whichever row save_contractor_trades() above just marked primary.
       portfolio_photos:  finalPhotos,
       banner_url:        finalBanner,
       avatar_url:        finalAvatar,
@@ -370,25 +419,40 @@ export default function CompanyProfileScreen() {
           <SectionHeader label="TRADE TYPES *" C={C} />
           <Text style={{ fontSize:TY.xs, color:C.textMuted, marginBottom:SP[3] }}>
             Select the trades you work in — this filters your specializations below
+            {selectedTrades.length > 1 ? '. Tap ★ to set which one leads your profile.' : ''}
           </Text>
           <View style={{ flexDirection:'row', flexWrap:'wrap', gap:8, marginBottom:SP[4] }}>
-            {TRADE_TYPE_LIST.map(trade => {
-              const active = selectedTrades.includes(trade);
+            {trades.map(trade => {
+              const active = selectedTrades.includes(trade.id);
+              const isPrimary = active && primaryTrade === trade.id;
               return (
-                <TouchableOpacity
-                  key={trade}
-                  onPress={() => toggleTrade(trade)}
+                <View
+                  key={trade.id}
                   style={{
+                    flexDirection:'row', alignItems:'center',
                     borderRadius:R.full, borderWidth: active ? 1.5 : 0.5,
                     borderColor: active ? C.orange : C.border,
                     backgroundColor: active ? 'rgba(255,98,0,0.12)' : C.surface,
-                    paddingHorizontal:12, paddingVertical:6,
+                    paddingLeft:12,
+                    paddingRight: active && selectedTrades.length > 1 ? 4 : 12,
+                    paddingVertical:6,
                   }}
                 >
-                  <Text style={{ fontSize:TY.sm, fontWeight: active ? FW.bold : FW.medium, color: active ? C.orange : C.textSecondary }}>
-                    {trade}
-                  </Text>
-                </TouchableOpacity>
+                  <TouchableOpacity onPress={() => toggleTrade(trade.id)}>
+                    <Text style={{ fontSize:TY.sm, fontWeight: active ? FW.bold : FW.medium, color: active ? C.orange : C.textSecondary }}>
+                      {trade.label}
+                    </Text>
+                  </TouchableOpacity>
+                  {active && selectedTrades.length > 1 && (
+                    <TouchableOpacity
+                      onPress={() => setPrimaryTrade(trade.id)}
+                      style={{ paddingHorizontal:6, paddingVertical:4 }}
+                      hitSlop={{ top:8, bottom:8, left:4, right:8 }}
+                    >
+                      <Ionicons name={isPrimary ? 'star' : 'star-outline'} size={14} color={isPrimary ? C.orange : C.textMuted} />
+                    </TouchableOpacity>
+                  )}
+                </View>
               );
             })}
           </View>
