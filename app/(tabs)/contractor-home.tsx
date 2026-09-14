@@ -655,7 +655,7 @@ export default function ContractorHomeScreen() {
     // Contractor profile
     const { data: c } = await supabase
       .from('contractors')
-      .select('id,company_name,username,is_available,lat,lng,rating,push_token,trade_type,verification_status,verification_rejection_reason,plan')
+      .select('id,company_name,username,is_available,lat,lng,rating,push_token,trade_type,verification_status,verification_rejection_reason,plan,contractor_trades(trade_id)')
       .eq('id', contractorId)
       .single();
     setContractor(c);
@@ -796,7 +796,17 @@ export default function ContractorHomeScreen() {
           const plan = c?.plan as string | undefined;
           const raw  = payload.new as any;
 
-          const tradeMatches = !c?.trade_type || raw.trade === c.trade_type;
+          // Membership against the contractor's full trade list, not an
+          // exact-match against trade_type. trade_type is now a
+          // denormalized cache of just the PRIMARY trade (see
+          // contractor_trades_maintain()) -- a multi-trade contractor's
+          // trade_type is a single name, e.g. 'HVAC', so a new
+          // 'Electrical' job posted would never have matched their
+          // second trade under the old exact-match check. No trades set
+          // at all still means "show me everything," matching the old
+          // behavior for that case.
+          const myTradeIds: string[] = (c?.contractor_trades ?? []).map((t: any) => t.trade_id);
+          const tradeMatches = myTradeIds.length === 0 || myTradeIds.includes(raw.trade);
           if ((plan === 'leads' || plan === 'pro') && raw?.id && !raw.contractor_id && raw.status === 'pending' && tradeMatches) {
             const priorityJob: Job = {
               id:              raw.id,
