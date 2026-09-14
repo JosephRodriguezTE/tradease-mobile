@@ -21,6 +21,7 @@ import { WorkOrderSheet } from '@/components/WorkOrderSheet';
 import { useAuth } from '@/hooks/useAuth';
 import { DEFAULT_MAP_REGION, MAPBOX_ACCESS_TOKEN } from '@/lib/mapConfig';
 import { supabase } from '@/lib/supabase';
+import { Type as DesignType } from '@/lib/design/tokens';
 
 MapboxGL.setAccessToken(MAPBOX_ACCESS_TOKEN);
 
@@ -177,13 +178,18 @@ function PulseRing({ color }: { color: string }) {
 
 // ─── SectionCard ─────────────────────────────────────────────────────────────
 
-function SectionCard({ title, icon, badge, collapsed, onToggle, accent, children }: {
+function SectionCard({ title, icon, badge, collapsed, onToggle, accent, quiet, children }: {
   title: string; icon: string; badge?: string | number;
   collapsed: boolean; onToggle: () => void; accent?: string;
+  /** Reference material, not an action competing for attention (rule:
+   * status/reference content is text, not a filled card) -- drops the
+   * border/fill to a plain top rule and de-emphasizes the title. Same
+   * collapsed/onToggle state as every other SectionCard; visual only. */
+  quiet?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <View style={s.card}>
+    <View style={quiet ? s.cardQuiet : s.card}>
       <TouchableOpacity
         style={s.cardHead}
         onPress={onToggle}
@@ -195,7 +201,7 @@ function SectionCard({ title, icon, badge, collapsed, onToggle, accent, children
       >
         <View style={s.cardHeadLeft}>
           <Text style={s.cardIcon}>{icon}</Text>
-          <Text style={[s.cardTitle, accent ? { color: accent } : null]}>{title}</Text>
+          <Text style={[s.cardTitle, quiet && s.cardTitleQuiet, accent ? { color: accent } : null]}>{title}</Text>
           {badge != null && (
             <View style={[s.cardBadge, { backgroundColor: accent ? `${accent}20` : O.orangeMu }]}>
               <Text style={[s.cardBadgeTxt, { color: accent ?? O.orange }]}>{badge}</Text>
@@ -558,6 +564,14 @@ function BillSection({
       onToggle={onToggle}
       accent={pending.length > 0 ? O.amber : undefined}
     >
+      <Text style={s.billTotalLabel}>
+        {pending.length > 0 ? 'TOTAL IF ALL APPROVED' : 'TOTAL'}
+      </Text>
+      <Text style={s.billTotalAmt}>
+        {pending.length > 0 ? fmt$(total + pendingTotal) : fmt$(total)}
+      </Text>
+      <View style={[s.divider, { marginVertical: 12 }]} />
+
       <View style={s.billRow}>
         <Text style={s.billLabel}>Base job price</Text>
         <Text style={s.billAmt}>{fmt$(basePrice * 100)}</Text>
@@ -621,16 +635,6 @@ function BillSection({
           </View>
         </View>
       ))}
-
-      <View style={[s.divider, { marginVertical: 12 }]} />
-      <View style={s.billRow}>
-        <Text style={[s.billLabel, { fontWeight: '800', color: O.txt }]}>
-          Total{pending.length > 0 ? ' (if all approved)' : ''}
-        </Text>
-        <Text style={[s.billAmt, { fontSize: 22 }]}>
-          {pending.length > 0 ? fmt$(total + pendingTotal) : fmt$(total)}
-        </Text>
-      </View>
     </SectionCard>
   );
 }
@@ -751,7 +755,7 @@ function SupportSection({ wo, collapsed, onToggle }: { wo: WoData; collapsed: bo
   }
 
   return (
-    <SectionCard title="Help & Support" icon="🛟" collapsed={collapsed} onToggle={onToggle}>
+    <SectionCard title="Help & Support" icon="🛟" collapsed={collapsed} onToggle={onToggle} quiet>
       <TouchableOpacity style={s.supportRow} onPress={reportIssue}>
         <Ionicons name="flag-outline" size={18} color={O.amber} />
         <View style={{ flex: 1 }}>
@@ -1762,6 +1766,12 @@ const s = StyleSheet.create({
 
   // Cards
   card:        { backgroundColor: O.card, borderRadius: 16, borderWidth: 1, borderColor: O.border, marginBottom: 10, overflow: 'hidden' },
+  // Quiet variant: reference/support content shouldn't carry the same
+  // filled-card weight as an action or the job total -- a plain top rule
+  // instead of a bordered fill (rule 3: status/reference is text, not a
+  // container fighting for attention).
+  cardQuiet:      { backgroundColor: 'transparent', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: O.border, borderRadius: 0, marginBottom: 10 },
+  cardTitleQuiet: { color: O.txt2, fontWeight: '600' },
   cardHead:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, paddingBottom: 14 },
   cardHeadLeft:{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   cardIcon:    { fontSize: 16 },
@@ -1806,7 +1816,11 @@ const s = StyleSheet.create({
   cActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 12, borderWidth: 1, borderColor: O.border, backgroundColor: O.cardAlt, paddingVertical: 9, paddingHorizontal: 12 },
   cActionTxt: { fontSize: 13, fontWeight: '600', color: O.orange },
 
-  // Bill
+  // Bill -- the job total leads the section (rule: money is the biggest
+  // thing on any screen with money on it), everything else below it is
+  // a plain text row.
+  billTotalLabel: { fontSize: DesignType.eyebrow.fontSize, fontWeight: DesignType.eyebrow.fontWeight, letterSpacing: DesignType.eyebrow.letterSpacing, color: O.txt3, textTransform: 'uppercase' },
+  billTotalAmt:   { fontSize: DesignType.money.fontSize, fontWeight: DesignType.money.fontWeight, letterSpacing: DesignType.money.letterSpacing, color: O.txt, marginTop: 2, fontVariant: ['tabular-nums'] },
   billRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 10 },
   billLabel: { fontSize: 13, color: O.txt2, flex: 1 },
   billMeta:  { fontSize: 11, color: O.txt3 },
