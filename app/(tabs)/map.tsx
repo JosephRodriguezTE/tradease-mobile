@@ -11,11 +11,12 @@
 // at the top, not next to the code that uses it.
 
 import { useTheme, AppColors } from '@/context/ThemeContext';
+import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
 import { supabase } from '@/lib/supabase';
 import { getCurrentPosition, reverseGeocode, Coords } from '@/lib/locationService';
 import { MAPBOX_ACCESS_TOKEN, DEFAULT_MAP_REGION } from '@/lib/mapConfig';
-import { FILTERABLE_TRADES, fromDbValue, getTrade, Trade } from '@/lib/map/trades';
+import { FILTERABLE_TRADES, fromDbValue, getTrade, Trade, TradeId } from '@/lib/map/trades';
 import { formatReopensIn } from '@/lib/time';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetFlatList, BottomSheetView } from '@gorhom/bottom-sheet';
@@ -51,8 +52,25 @@ interface NearbyContractor {
   verification_status: string;
   distance_miles: number;
   specializations: string[] | null;
-  lat: number;
-  lng: number;
+  // contractors_nearby() never returns a raw coordinate — pin_lat/pin_lng
+  // is already the safe, decided point: the service-area center (default)
+  // or an opted-in storefront location, never both, never distinguishable
+  // from the payload alone. See public_contractor_location() server-side.
+  pin_lat: number;
+  pin_lng: number;
+  pin_mode: 'service_area' | 'storefront';
+  service_radius_miles: number | null;
+  area_label: string;
+}
+
+// Guest-only: contractor_coverage_summary()'s output. Aggregate counts
+// per trade, nothing else — no coordinates, ids, or names ever reach a
+// guest session. See lib/map/location-privacy.ts and the migration
+// comment for the small-number suppression this already applies
+// server-side (a count below 3 is omitted entirely, not shown as "some").
+interface CoverageCount {
+  trade: string;
+  contractor_count: number;
 }
 
 interface NearbyJob {
@@ -171,6 +189,12 @@ function makeStyles(C: AppColors) {
     },
     availDot:   { width: 6, height: 6, borderRadius: 3 },
     availText:  { fontSize: 11, fontWeight: '600' },
+    modeTag: {
+      flexDirection: 'row', alignItems: 'center', gap: 4,
+      borderRadius: 999, borderWidth: 1,
+      paddingHorizontal: 8, paddingVertical: 3,
+    },
+    modeTagText: { fontSize: 11, fontWeight: '600' },
 
     ratingRow:  { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
     stars:      { fontSize: 12, color: '#FBBF24' },
@@ -223,6 +247,22 @@ function makeStyles(C: AppColors) {
 
     emptyListWrap: { alignItems: 'center', paddingTop: 40, paddingHorizontal: 30, gap: 10 },
     emptyListText: { fontSize: 13.5, color: C.textSecondary, textAlign: 'center', lineHeight: 20 },
+
+    // Guest coverage summary — trade-count rows and the sign-in prompt
+    coverageRow: {
+      flexDirection: 'row', alignItems: 'center', gap: 10,
+      backgroundColor: C.surfaceAlt, borderRadius: 14, borderWidth: 1, borderColor: C.border,
+      paddingHorizontal: 16, paddingVertical: 14, marginBottom: 10,
+    },
+    coverageRowText: { fontSize: 14, color: C.textSecondary },
+    guestPromptCard: {
+      flexDirection: 'row', alignItems: 'center', gap: 10,
+      backgroundColor: `${C.orange}0F`, borderRadius: 14, borderWidth: 1, borderColor: `${C.orange}33`,
+      padding: 14, marginBottom: 14,
+    },
+    guestPromptTitle: { fontSize: 13.5, fontWeight: '800', color: C.textPrimary },
+    guestPromptBody:  { fontSize: 12, color: C.textSecondary, marginTop: 1 },
+    guestSignInBtn:   { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
   });
 }
 
@@ -259,6 +299,52 @@ function avatarColor(name: string) {
 
 function initials(name: string) {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?';
+}
+
+// Trade.label is a category noun ("Electrical", "Heating & cooling") —
+// right for a chip or a card, wrong for "9 ___ cover Commack", which
+// wants the profession itself. Small, bounded, this-file-only mapping
+// rather than growing Trade with a field only this one sentence needs.
+const TRADE_PLURAL: Record<TradeId, string> = {
+  hvac: 'HVAC techs',
+  plumbing: 'plumbers',
+  electrical: 'electricians',
+  roofing: 'roofers',
+  carpentry: 'carpenters',
+  painting: 'painters',
+  landscaping: 'landscapers',
+  cleaning: 'cleaners',
+  handyman: 'handyman pros',
+  general: 'contractors',
+};
+
+const MILES_TO_METERS = 1609.344;
+const METERS_PER_DEG_LAT = 111320;
+
+/**
+ * GeoJSON circle approximation for a coverage blob — a real polygon sized
+ * in miles, not a fixed-pixel marker, so it scales correctly with zoom
+ * instead of staying a constant screen size regardless of how far the map
+ * is zoomed. Longitude is corrected by cos(latitude) so the circle isn't
+ * stretched east-west away from the equator.
+ */
+function coverageCirclePolygon(
+  centerLng: number,
+  centerLat: number,
+  radiusMiles: number,
+  points = 48
+): GeoJSON.Feature<GeoJSON.Polygon> {
+  const radiusMeters = radiusMiles * MILES_TO_METERS;
+  const metersPerDegLng = METERS_PER_DEG_LAT * Math.cos((centerLat * Math.PI) / 180);
+  const ring: [number, number][] = [];
+  for (let i = 0; i <= points; i++) {
+    const angle = (i / points) * 2 * Math.PI;
+    ring.push([
+      centerLng + (radiusMeters * Math.cos(angle)) / metersPerDegLng,
+      centerLat + (radiusMeters * Math.sin(angle)) / METERS_PER_DEG_LAT,
+    ]);
+  }
+  return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] }, properties: {} };
 }
 
 // ─── Trade chip row ───────────────────────────────────────────────────────────
@@ -347,6 +433,23 @@ function ContractorCard({ item, onPress, selected, C }: {
             <Text style={{ fontSize: 11, color: '#22C55E', fontWeight: '700' }}>✓ Verified</Text>
           </View>
         )}
+
+        {/* Carries the map's pin-vs-blob distinction into the list — a
+            customer scanning cards should never have to guess which ones
+            are a real address versus a coverage area. */}
+        <View style={[s.modeTag, {
+          borderColor: item.pin_mode === 'storefront' ? 'rgba(59,130,246,0.3)' : C.border,
+          backgroundColor: item.pin_mode === 'storefront' ? 'rgba(59,130,246,0.08)' : 'transparent',
+        }]}>
+          <Ionicons
+            name={item.pin_mode === 'storefront' ? 'storefront-outline' : 'ellipse-outline'}
+            size={11}
+            color={item.pin_mode === 'storefront' ? '#3B82F6' : C.textMuted}
+          />
+          <Text style={[s.modeTagText, { color: item.pin_mode === 'storefront' ? '#3B82F6' : C.textMuted }]}>
+            {item.pin_mode === 'storefront' ? 'Storefront' : 'Coverage area'}
+          </Text>
+        </View>
       </View>
 
       {item.rating != null && (
@@ -416,10 +519,27 @@ function JobCard({ item, onPress, selected, C }: {
   );
 }
 
+// ─── Guest: Coverage Summary Row ───────────────────────────────────────────────
+
+function CoverageRow({ item, C }: { item: CoverageCount; C: AppColors }) {
+  const s = makeStyles(C);
+  const trade = fromDbValue(item.trade);
+  return (
+    <View style={s.coverageRow}>
+      <View style={[s.tradeChipDot, { backgroundColor: trade.color }]} />
+      <Text style={s.coverageRowText}>
+        <Text style={{ fontWeight: '800', color: C.textPrimary }}>{item.contractor_count}</Text>
+        {' '}{TRADE_PLURAL[trade.id]} nearby
+      </Text>
+    </View>
+  );
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function MapScreen() {
   const { colors: C }      = useTheme();
+  const { isGuest }        = useAuth();
   const { isContractor }   = useRole();
   const router             = useRouter();
   const s                  = makeStyles(C);
@@ -432,6 +552,7 @@ export default function MapScreen() {
   const [tradeFilter,   setTradeFilter]   = useState('All');
   const [contractors,   setContractors]   = useState<NearbyContractor[]>([]);
   const [jobs,          setJobs]          = useState<NearbyJob[]>([]);
+  const [coverageSummary, setCoverageSummary] = useState<CoverageCount[]>([]);
   const [loading,       setLoading]       = useState(false);
   const [refreshing,    setRefreshing]    = useState(false);
   const [hasFetchedOnce, setHasFetchedOnce] = useState(false);
@@ -469,17 +590,7 @@ export default function MapScreen() {
     if (!coords) return;
     isRefresh ? setRefreshing(true) : setLoading(true);
 
-    if (!isContractor) {
-      // Customer: nearby contractors
-      const { data } = await supabase.rpc('contractors_nearby', {
-        user_lat:         coords.lat,
-        user_lng:         coords.lng,
-        max_miles:        radius,
-        trade_filter:     tradeFilter !== 'All' ? tradeFilter : null,
-        specialty_filter: null,
-      });
-      setContractors((data ?? []) as NearbyContractor[]);
-    } else {
+    if (isContractor) {
       // Contractor: public jobs only, server-fuzzed. RLS no longer grants
       // browsing contractors direct table access to bookings — this RPC
       // is the only read path. Filtering (pending, unclaimed, public, not
@@ -491,11 +602,34 @@ export default function MapScreen() {
         trade_filter: tradeFilter !== 'All' ? tradeFilter : null,
       });
       setJobs((data ?? []) as NearbyJob[]);
+    } else if (isGuest) {
+      // Guest: no session beyond the bare anon key (see hooks/useAuth.ts —
+      // guest mode is client-side only, no signInAnonymously()). Density
+      // only — this RPC never returns a coordinate, id, or name, and
+      // suppresses any trade under 3 contractors server-side.
+      const { data } = await supabase.rpc('contractor_coverage_summary', {
+        user_lat:     coords.lat,
+        user_lng:     coords.lng,
+        radius_miles: radius,
+      });
+      setCoverageSummary((data ?? []) as CoverageCount[]);
+    } else {
+      // Signed-in customer: full nearby-contractor list with the
+      // server-computed safe pin (service-area blob center or an
+      // opted-in storefront point — see public_contractor_location()).
+      const { data } = await supabase.rpc('contractors_nearby', {
+        user_lat:         coords.lat,
+        user_lng:         coords.lng,
+        max_miles:        radius,
+        trade_filter:     tradeFilter !== 'All' ? tradeFilter : null,
+        specialty_filter: null,
+      });
+      setContractors((data ?? []) as NearbyContractor[]);
     }
 
     setHasFetchedOnce(true);
     isRefresh ? setRefreshing(false) : setLoading(false);
-  }, [coords, radius, tradeFilter, isContractor]);
+  }, [coords, radius, tradeFilter, isContractor, isGuest]);
 
   useEffect(() => {
     if (coords) fetchResults();
@@ -505,8 +639,57 @@ export default function MapScreen() {
   // or the hook count changes between renders once `locating`/`locErr` flip. ──
 
   const results = isContractor ? jobs : contractors;
+  // Guests never populate `contractors` at all (they get coverageSummary
+  // instead), which would otherwise make the old isEmpty/list-empty
+  // copy fire permanently for them — guarded out below wherever it's used.
   const isEmpty = hasFetchedOnce && !loading && results.length === 0;
   const jobPins = isContractor ? jobs.filter(j => j.fuzzed_lat != null && j.fuzzed_lng != null) : [];
+
+  // Reverse-geocoded from the customer's OWN device GPS (see getLocation
+  // above) — never derived from any contractor's data, so it's safe to
+  // show a guest a real place name even though contractor_coverage_summary
+  // itself returns none. "City, ST" -> "City".
+  const cityLabel = useMemo(() => locationLabel.split(',')[0]?.trim() || 'your area', [locationLabel]);
+
+  // Density copy for a signed-in customer's own results — "9 electricians
+  // cover Commack" reads better than a flat count when every result really
+  // is one trade in one place. Bails to null (the plain-count fallback)
+  // the moment anything doesn't match, rather than trying to summarize a
+  // mixed result set.
+  const densityLabel = useMemo(() => {
+    if (isContractor || isGuest || contractors.length === 0) return null;
+    let key: string | null = null;
+    let trade: Trade | null = null;
+    let area: string | null = null;
+    let matched = 0;
+    for (const c of contractors) {
+      const t = contractorTrade(c.trade_type);
+      const a = c.location?.trim();
+      if (!a) return null;
+      const k = `${t.id}|${a}`;
+      if (key === null) { key = k; trade = t; area = a; matched = 1; }
+      else if (k === key) matched++;
+      else return null;
+    }
+    if (!trade || !area || matched !== contractors.length) return null;
+    return `${matched} ${TRADE_PLURAL[trade.id]} cover ${area}`;
+  }, [contractors, isContractor, isGuest]);
+
+  // Guest peek/empty copy from contractor_coverage_summary's rows —
+  // "9 electricians and 4 plumbers cover Commack" for multiple trades,
+  // one clause for a single trade, and an honest (not blank, not a false
+  // "zero contractors") fallback when everything is suppressed. See the
+  // ListEmptyComponent below for the fuller version of that fallback.
+  const guestPeekLabel = useMemo(() => {
+    if (!isGuest) return null;
+    if (!hasFetchedOnce) return `Finding contractors near ${cityLabel}…`;
+    if (coverageSummary.length === 0) return `Not enough contractors near ${cityLabel} yet`;
+    const parts = coverageSummary.map(r => `${r.contractor_count} ${TRADE_PLURAL[fromDbValue(r.trade).id]}`);
+    const joined = parts.length > 1
+      ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
+      : parts[0];
+    return `${joined} cover ${cityLabel}`;
+  }, [isGuest, hasFetchedOnce, coverageSummary, cityLabel]);
 
   // Presentation-only reordering of the already-fetched results — no new
   // query, no new RPC param. Distance is the RPC's own default order.
@@ -537,8 +720,11 @@ export default function MapScreen() {
     const points: [number, number][] = [[coords.lng, coords.lat]];
     if (isContractor) {
       jobPins.forEach(j => points.push([j.fuzzed_lng!, j.fuzzed_lat!]));
-    } else {
-      contractors.forEach(c => points.push([c.lng, c.lat]));
+    } else if (!isGuest) {
+      // Guests never receive a coordinate at all (contractors stays
+      // empty for them by design), so this branch is moot for them in
+      // practice — explicit anyway so the intent reads clearly.
+      contractors.forEach(c => points.push([c.pin_lng, c.pin_lat]));
     }
     if (points.length === 1) return null; // just the user — use a fixed zoom instead of a zero-size box
     const lngs = points.map(p => p[0]);
@@ -547,7 +733,7 @@ export default function MapScreen() {
       ne: [Math.max(...lngs) + 0.015, Math.max(...lats) + 0.015] as [number, number],
       sw: [Math.min(...lngs) - 0.015, Math.min(...lats) - 0.015] as [number, number],
     };
-  }, [coords, contractors, jobPins, isContractor]);
+  }, [coords, contractors, jobPins, isContractor, isGuest]);
 
   const handlePinPress = useCallback((id: string) => {
     setSelectedId(id);
@@ -590,7 +776,9 @@ export default function MapScreen() {
     );
   }
 
-  const peekLabel = `${results.length} ${isContractor ? 'open job' : 'contractor'}${results.length !== 1 ? 's' : ''} within ${radius} mi`;
+  const peekLabel = guestPeekLabel
+    ?? densityLabel
+    ?? `${results.length} ${isContractor ? 'open job' : 'contractor'}${results.length !== 1 ? 's' : ''} within ${radius} mi`;
 
   return (
     <View style={s.container}>
@@ -635,24 +823,54 @@ export default function MapScreen() {
                 </MapboxGL.MarkerView>
               );
             })
-          : contractors.map(c => {
+          // Guests get counts, never pins or blobs — no coordinate ever
+          // reaches a guest session in the first place (contractor_
+          // coverage_summary returns none), so there's nothing to plot.
+          : !isGuest && contractors.map(c => {
               const trade = contractorTrade(c.trade_type);
               const selected = selectedId === c.id;
+
+              if (c.pin_mode === 'storefront') {
+                // The one case with a real, opted-in address — a precise
+                // pin is correct here, and it needs to read as visually
+                // distinct from a coverage blob at a glance: a shop icon
+                // in the same solid, hard-edged pin used everywhere else
+                // a location is a real, visitable place.
+                return (
+                  <MapboxGL.MarkerView key={c.id} id={`contractor-${c.id}`} coordinate={[c.pin_lng, c.pin_lat]}>
+                    <TouchableOpacity onPress={() => handlePinPress(c.id)} activeOpacity={0.8}>
+                      <View style={[s.pin, selected && s.pinSelected, { backgroundColor: trade.color }]}>
+                        <Ionicons name="storefront" size={14} color="#fff" />
+                        <View style={[s.pinAvailDot, { backgroundColor: c.is_available ? '#22C55E' : '#6B7280' }]} />
+                      </View>
+                    </TouchableOpacity>
+                  </MapboxGL.MarkerView>
+                );
+              }
+
+              // service_area: a soft coverage blob sized to the real
+              // service_radius_miles, not a point. Deliberately no
+              // TouchableOpacity/onPress here at all — it isn't a place,
+              // so it shouldn't behave like a tappable one. Selecting this
+              // contractor only happens from the list below.
+              const shape = coverageCirclePolygon(c.pin_lng, c.pin_lat, c.service_radius_miles ?? 5);
               return (
-                <MapboxGL.MarkerView key={c.id} id={`contractor-${c.id}`} coordinate={[c.lng, c.lat]}>
-                  <TouchableOpacity onPress={() => handlePinPress(c.id)} activeOpacity={0.8}>
-                    <View style={[s.pin, selected && s.pinSelected, { backgroundColor: trade.color }]}>
-                      <Ionicons name="person" size={14} color="#fff" />
-                      <View style={[s.pinAvailDot, { backgroundColor: c.is_available ? '#22C55E' : '#6B7280' }]} />
-                    </View>
-                  </TouchableOpacity>
-                </MapboxGL.MarkerView>
+                <MapboxGL.ShapeSource key={c.id} id={`coverage-src-${c.id}`} shape={shape}>
+                  <MapboxGL.FillLayer
+                    id={`coverage-fill-${c.id}`}
+                    style={{ fillColor: trade.color, fillOpacity: selected ? 0.28 : 0.14 }}
+                  />
+                  <MapboxGL.LineLayer
+                    id={`coverage-line-${c.id}`}
+                    style={{ lineColor: trade.color, lineWidth: selected ? 2 : 1, lineOpacity: 0.45 }}
+                  />
+                </MapboxGL.ShapeSource>
               );
             })
         }
       </MapboxGL.MapView>
 
-      {isEmpty && (
+      {isEmpty && !isGuest && (
         <View style={[s.mapEmptyBanner, { top: 12 }]}>
           <Ionicons name={isContractor ? 'briefcase-outline' : 'person-outline'} size={15} color={C.textSecondary} />
           <Text style={s.mapEmptyBannerText} numberOfLines={2}>
@@ -718,11 +936,11 @@ export default function MapScreen() {
           </TouchableOpacity>
         </BottomSheetView>
 
-        {sheetIndex >= 1 && !isContractor && (
+        {sheetIndex >= 1 && !isContractor && !isGuest && (
           <TradeChipRow active={tradeFilter} onSelect={setTradeFilter} C={C} />
         )}
 
-        {sheetIndex >= 2 && (
+        {sheetIndex >= 2 && !isGuest && (
           <View style={s.sortRow}>
             <Text style={s.sortLabel}>Sort</Text>
             {(['distance', isContractor ? 'price' : 'rating'] as SortMode[]).map(mode => {
@@ -743,30 +961,76 @@ export default function MapScreen() {
         )}
 
         {sheetIndex >= 1 ? (
-          <BottomSheetFlatList
-            data={displayResults as any[]}
-            keyExtractor={item => item.id}
-            contentContainerStyle={s.list}
-            refreshing={refreshing}
-            onRefresh={() => fetchResults(true)}
-            ListEmptyComponent={
-              isEmpty ? (
-                <View style={s.emptyListWrap}>
-                  <Ionicons name={isContractor ? 'briefcase-outline' : 'person-outline'} size={30} color={C.textMuted} />
-                  <Text style={s.emptyListText}>
-                    {isContractor
-                      ? 'No pending jobs right now. Check back soon or expand your radius.'
-                      : `No ${tradeFilter !== 'All' ? tradeFilter + ' ' : ''}contractors within ${radius} miles.`}
-                  </Text>
+          isGuest ? (
+            // No pins, no blobs, no individual records — density counts
+            // and a sign-in prompt. Same BottomSheetFlatList component as
+            // the signed-in list, different data.
+            <BottomSheetFlatList
+              data={coverageSummary}
+              keyExtractor={item => item.trade}
+              contentContainerStyle={s.list}
+              refreshing={refreshing}
+              onRefresh={() => fetchResults(true)}
+              ListHeaderComponent={coverageSummary.length > 0 ? (
+                <View style={s.guestPromptCard}>
+                  <Ionicons name="lock-closed-outline" size={16} color={C.orange} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.guestPromptTitle}>See contractors individually</Text>
+                    <Text style={s.guestPromptBody}>Sign in for pins, profiles, and ratings.</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[s.guestSignInBtn, { backgroundColor: C.orange }]}
+                    onPress={() => router.push('/login')}
+                  >
+                    <Text style={s.emptyBtnText}>Sign In</Text>
+                  </TouchableOpacity>
                 </View>
-              ) : null
-            }
-            renderItem={({ item }) =>
-              isContractor
-                ? <JobCard item={item} C={C} selected={selectedId === item.id} onPress={() => goToDetail(item.id)} />
-                : <ContractorCard item={item} C={C} selected={selectedId === item.id} onPress={() => goToDetail(item.id)} />
-            }
-          />
+              ) : null}
+              ListEmptyComponent={
+                hasFetchedOnce && !loading ? (
+                  <View style={s.emptyListWrap}>
+                    <Ionicons name="shield-checkmark-outline" size={30} color={C.textMuted} />
+                    <Text style={s.emptyListText}>
+                      Showing a trade breakdown this early could point right back to a
+                      specific contractor. Sign in to see everyone near {cityLabel} individually.
+                    </Text>
+                    <TouchableOpacity
+                      style={[s.emptyBtn, { backgroundColor: C.orange }]}
+                      onPress={() => router.push('/login')}
+                    >
+                      <Text style={s.emptyBtnText}>Sign In</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null
+              }
+              renderItem={({ item }) => <CoverageRow item={item} C={C} />}
+            />
+          ) : (
+            <BottomSheetFlatList
+              data={displayResults as any[]}
+              keyExtractor={item => item.id}
+              contentContainerStyle={s.list}
+              refreshing={refreshing}
+              onRefresh={() => fetchResults(true)}
+              ListEmptyComponent={
+                isEmpty ? (
+                  <View style={s.emptyListWrap}>
+                    <Ionicons name={isContractor ? 'briefcase-outline' : 'person-outline'} size={30} color={C.textMuted} />
+                    <Text style={s.emptyListText}>
+                      {isContractor
+                        ? 'No pending jobs right now. Check back soon or expand your radius.'
+                        : `No ${tradeFilter !== 'All' ? tradeFilter + ' ' : ''}contractors within ${radius} miles.`}
+                    </Text>
+                  </View>
+                ) : null
+              }
+              renderItem={({ item }) =>
+                isContractor
+                  ? <JobCard item={item} C={C} selected={selectedId === item.id} onPress={() => goToDetail(item.id)} />
+                  : <ContractorCard item={item} C={C} selected={selectedId === item.id} onPress={() => goToDetail(item.id)} />
+              }
+            />
+          )
         ) : (
           <View style={{ flex: 1 }} />
         )}
