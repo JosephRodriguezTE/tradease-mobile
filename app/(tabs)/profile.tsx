@@ -16,13 +16,14 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+import Svg, { Circle, Text as SvgText } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Spacing } from '../../constants/Layout';
 import { Font, Radius } from '../../constants/theme';
 import { useTheme, AppColors } from '@/context/ThemeContext';
+import { OnboardingColors as OC, OnboardingSpacing as OS2, FontSize as FS } from '@/lib/design/onboarding-tokens';
 import { useAuth } from '../../hooks/useAuth';
 import { useRole } from '../../hooks/useRole';
 import { supabase } from '../../lib/supabase';
@@ -424,6 +425,15 @@ const FIELD_ROUTES: Record<string, string> = {
   username:     '/profile/personal-info',
 };
 
+// One container, one ring (interface-rules spec: no nested boxes around
+// a progress indicator) -- previously a sized View wrapping an
+// absolutely-positioned Svg plus an RN Text overlay for the percentage
+// (two layout elements around one ring). The percentage is now SVG-
+// native text inside the same <Svg>, so this is a single element; the
+// caller supplies the one real container (the tappable card around it).
+// UNVERIFIED: the dy="0.35em" vertical-centering offset is a standard,
+// widely-used SVG convention, but I can't render this to confirm the
+// percentage lands pixel-centered on both platforms -- check on device.
 function RingProgress({ score, size = 56 }: { score: number; size?: number }) {
   const strokeW = 5;
   const r = (size - strokeW) / 2;
@@ -431,21 +441,25 @@ function RingProgress({ score, size = 56 }: { score: number; size?: number }) {
   const offset = circ * (1 - score / 100);
   const cx = size / 2;
   return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Svg width={size} height={size} style={{ position: 'absolute' }}>
-        <Circle cx={cx} cy={cx} r={r} stroke="rgba(255,98,0,0.15)" strokeWidth={strokeW} fill="none" />
-        <Circle
-          cx={cx} cy={cx} r={r}
-          stroke="#FF6200" strokeWidth={strokeW} fill="none"
-          strokeDasharray={circ} strokeDashoffset={offset}
-          strokeLinecap="round"
-          transform={`rotate(-90, ${cx}, ${cx})`}
-        />
-      </Svg>
-      <Text style={{ fontSize: size < 80 ? 11 : 20, fontWeight: '900', color: '#FF6200' }}>
+    <Svg width={size} height={size}>
+      <Circle cx={cx} cy={cx} r={r} stroke="rgba(255,98,0,0.15)" strokeWidth={strokeW} fill="none" />
+      <Circle
+        cx={cx} cy={cx} r={r}
+        stroke={OC.orange} strokeWidth={strokeW} fill="none"
+        strokeDasharray={circ} strokeDashoffset={offset}
+        strokeLinecap="round"
+        transform={`rotate(-90, ${cx}, ${cx})`}
+      />
+      <SvgText
+        x={cx} y={cx} dy="0.35em"
+        textAnchor="middle"
+        fill={OC.orange}
+        fontSize={size < 80 ? FS.xs : FS.xl4}
+        fontWeight="900"
+      >
         {score}%
-      </Text>
-    </View>
+      </SvgText>
+    </Svg>
   );
 }
 
@@ -622,7 +636,7 @@ function ContractorProfileView({ profile, isOwner, teamActiveCount }: {
             borderRadius: Radius.lg, borderWidth: 1,
             borderColor: 'rgba(34,197,94,0.3)',
             padding: Spacing.md,
-            shadowColor: '#22C55E', shadowOffset: { width: 0, height: 0 },
+            shadowColor: OC.success, shadowOffset: { width: 0, height: 0 },
             shadowOpacity: 0.12, shadowRadius: 8, elevation: 3,
           }}>
             <View style={{
@@ -630,21 +644,21 @@ function ContractorProfileView({ profile, isOwner, teamActiveCount }: {
               backgroundColor: 'rgba(34,197,94,0.15)',
               alignItems: 'center', justifyContent: 'center',
             }}>
-              <Ionicons name="shield-checkmark" size={20} color="#22C55E" />
+              <Ionicons name="shield-checkmark" size={20} color={OC.success} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, fontWeight: Font.black, color: '#22C55E' }}>
+              <Text style={{ fontSize: FS.md, fontWeight: Font.black, color: OC.success }}>
                 Trusted Account
               </Text>
-              <Text style={{ fontSize: 12, color: '#22C55E', opacity: 0.75 }}>
+              <Text style={{ fontSize: FS.sm, color: OC.success, opacity: 0.75 }}>
                 All trust criteria met · visible to customers
               </Text>
             </View>
             <View style={{
-              backgroundColor: '#22C55E', borderRadius: Radius.full,
-              paddingHorizontal: 8, paddingVertical: 3,
+              backgroundColor: OC.success, borderRadius: Radius.full,
+              paddingHorizontal: OS2.sm, paddingVertical: OS2.xxxsPlus,
             }}>
-              <Text style={{ fontSize: 10, fontWeight: Font.black, color: '#000' }}>✓ TRUSTED</Text>
+              <Text style={{ fontSize: FS.xxs, fontWeight: Font.black, color: OC.black }}>✓ TRUSTED</Text>
             </View>
           </View>
         ) : (
@@ -656,7 +670,7 @@ function ContractorProfileView({ profile, isOwner, teamActiveCount }: {
                 borderRadius: Radius.lg, borderWidth: 1,
                 borderColor: 'rgba(255,98,0,0.25)',
                 padding: Spacing.md,
-                shadowColor: '#FF6200', shadowOffset: { width: 0, height: 0 },
+                shadowColor: OC.orange, shadowOffset: { width: 0, height: 0 },
                 shadowOpacity: 0.1, shadowRadius: 6, elevation: 2,
               }}
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setObOpen(true); }}
@@ -666,10 +680,10 @@ function ContractorProfileView({ profile, isOwner, teamActiveCount }: {
             >
               <RingProgress score={obScore} size={52} />
               <View style={{ flex: 1, gap: 2 }}>
-                <Text style={{ fontSize: 14, fontWeight: Font.bold, color: Colors.orange }}>
+                <Text style={{ fontSize: FS.md, fontWeight: Font.bold, color: Colors.orange }}>
                   Get Trusted · {obScore}% done
                 </Text>
-                <Text style={{ fontSize: 12, color: Colors.orange, opacity: 0.75 }} numberOfLines={1}>
+                <Text style={{ fontSize: FS.sm, color: Colors.orange, opacity: 0.75 }} numberOfLines={1}>
                   {obMissing.length} field{obMissing.length !== 1 ? 's' : ''} left · tap to complete
                 </Text>
               </View>
@@ -842,14 +856,14 @@ function ContractorProfileView({ profile, isOwner, teamActiveCount }: {
           {/* Header */}
           <View style={{
             flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-            paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
+            paddingHorizontal: OS2.xl, paddingTop: OS2.lgXl, paddingBottom: OS2.mdLg,
             borderBottomWidth: 0.5, borderBottomColor: Colors.border,
           }}>
             <View>
-              <Text style={{ fontSize: 18, fontWeight: Font.black, color: Colors.textPrimary }}>
+              <Text style={{ fontSize: FS.xl3, fontWeight: Font.black, color: Colors.textPrimary }}>
                 Trusted Account
               </Text>
-              <Text style={{ fontSize: 12, color: Colors.textMuted, marginTop: 2 }}>
+              <Text style={{ fontSize: FS.sm, color: Colors.textMuted, marginTop: 2 }}>
                 Fill out Personal Information to earn this badge
               </Text>
             </View>
@@ -861,24 +875,24 @@ function ContractorProfileView({ profile, isOwner, teamActiveCount }: {
             </TouchableOpacity>
           </View>
 
-          <ScrollView contentContainerStyle={{ padding: 20, gap: 20 }} showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerStyle={{ padding: OS2.xl, gap: 20 }} showsVerticalScrollIndicator={false}>
 
             {/* Ring + label */}
-            <View style={{ alignItems: 'center', paddingVertical: 8, gap: 12 }}>
+            <View style={{ alignItems: 'center', paddingVertical: OS2.sm, gap: 12 }}>
               <RingProgress score={obScore} size={110} />
               {obScore >= 100 ? (
                 <View style={{
                   flexDirection: 'row', alignItems: 'center', gap: 6,
                   backgroundColor: 'rgba(34,197,94,0.12)', borderRadius: Radius.full,
-                  paddingHorizontal: 14, paddingVertical: 6,
+                  paddingHorizontal: OS2.lg, paddingVertical: OS2.xs,
                 }}>
-                  <Ionicons name="shield-checkmark" size={14} color="#22C55E" />
-                  <Text style={{ fontSize: 13, fontWeight: Font.black, color: '#22C55E' }}>
+                  <Ionicons name="shield-checkmark" size={14} color={OC.success} />
+                  <Text style={{ fontSize: FS.base, fontWeight: Font.black, color: OC.success }}>
                     Trusted Account Active
                   </Text>
                 </View>
               ) : (
-                <Text style={{ fontSize: 13, color: Colors.textSecondary, textAlign: 'center' }}>
+                <Text style={{ fontSize: FS.base, color: Colors.textSecondary, textAlign: 'center' }}>
                   {obMissing.length} field{obMissing.length !== 1 ? 's' : ''} remaining to earn the Trusted badge
                 </Text>
               )}
@@ -886,7 +900,7 @@ function ContractorProfileView({ profile, isOwner, teamActiveCount }: {
 
             {/* Criteria list */}
             <View style={{ gap: 6 }}>
-              <Text style={{ fontSize: 11, fontWeight: Font.black, color: Colors.textMuted, letterSpacing: 1, marginBottom: 4 }}>
+              <Text style={{ fontSize: FS.xs, fontWeight: Font.black, color: Colors.textMuted, letterSpacing: 1, marginBottom: 4 }}>
                 TRUST CRITERIA
               </Text>
 
@@ -900,8 +914,8 @@ function ContractorProfileView({ profile, isOwner, teamActiveCount }: {
                       backgroundColor: Colors.surface, borderRadius: Radius.lg,
                       borderWidth: 0.5,
                       borderColor: isMissing ? 'rgba(255,98,0,0.25)' : 'rgba(34,197,94,0.25)',
-                      paddingHorizontal: 16, paddingVertical: 14, minHeight: 52,
-                      shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+                      paddingHorizontal: OS2.lgXl, paddingVertical: OS2.lg, minHeight: 52,
+                      shadowColor: OC.black, shadowOffset: { width: 0, height: 1 },
                       shadowOpacity: 0.15, shadowRadius: 4, elevation: 2,
                     }}
                     onPress={() => {
@@ -922,21 +936,21 @@ function ContractorProfileView({ profile, isOwner, teamActiveCount }: {
                         <Ionicons
                           name={isMissing ? 'ellipse-outline' : 'checkmark-circle'}
                           size={18}
-                          color={isMissing ? Colors.orange : '#22C55E'}
+                          color={isMissing ? Colors.orange : OC.success}
                         />
                       </View>
                       <View>
-                        <Text style={{ fontSize: 14, color: Colors.textPrimary, fontWeight: Font.medium }}>
+                        <Text style={{ fontSize: FS.md, color: Colors.textPrimary, fontWeight: Font.medium }}>
                           {f.label}
                         </Text>
-                        <Text style={{ fontSize: 11, color: Colors.textMuted, marginTop: 1 }}>
+                        <Text style={{ fontSize: FS.xs, color: Colors.textMuted, marginTop: 1 }}>
                           {f.weight}% of trust score
                         </Text>
                       </View>
                     </View>
                     {isMissing && (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <Text style={{ fontSize: 13, color: Colors.orange, fontWeight: Font.bold }}>Add</Text>
+                        <Text style={{ fontSize: FS.base, color: Colors.orange, fontWeight: Font.bold }}>Add</Text>
                         <Ionicons name="chevron-forward" size={14} color={Colors.orange} />
                       </View>
                     )}

@@ -57,6 +57,7 @@ export const OnboardingColors = {
   googleTextDark:  '#16A34A',
   gradientStart:   '#FF7A1F',
   info:            '#60A5FA',
+  black:           '#000000',
 } as const;
 
 /**
@@ -100,6 +101,7 @@ export const OnboardingType = {
 export const OnboardingSpacing = {
   none: 0,
   xxxs: 2,
+  xxxsPlus: 3,
   xxs: 4,
   xs: 6,
   sm: 8,
@@ -125,6 +127,7 @@ export const OnboardingSpacing = {
  * isn't tokenized here -- out of scope (raw hex/fontSize/padding only).
  */
 export const FontSize = {
+  xxs: 10,
   xs: 11,
   sm: 12,
   base: 13,
@@ -132,5 +135,7 @@ export const FontSize = {
   lg: 15,
   xl: 16,
   xl2: 17,
+  xl3: 18,
+  xl4: 20,
   xxl: 22,
 } as const;
