@@ -14,6 +14,7 @@ import React, { useEffect, useRef } from 'react';
 import {
     Animated, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
+import { OnboardingColors as OC, OnboardingSpacing as OS, FontSize as FS } from '@/lib/design/onboarding-tokens';
 
 type GateStatus = 'not_submitted' | 'pending_review' | 'rejected';
 
@@ -31,6 +32,17 @@ const REQUIREMENTS = [
   { icon: 'location-outline',    text: 'Service area description' },
   { icon: 'shield-outline',      text: 'Proof of insurance document' },
   { icon: 'document-text-outline', text: 'Agree to Tradease Liability Terms' },
+];
+
+// While-you-wait actions for the pending_review state -- replaces what
+// used to be a dead end (timeline + a Contact Support button and nothing
+// else to do). All three are real, reachable destinations regardless of
+// verification_status: the job feed renders for pending contractors too
+// (this Gate only appears when they tap Accept/Quote on it).
+const NEXT_STEPS = [
+  { icon: 'business-outline' as const, title: 'Build your company profile', sub: 'Services, service area, and pricing', to: '/profile/company-profile' as const },
+  { icon: 'images-outline' as const, title: 'Add portfolio photos', sub: 'Customers see this before anything else', to: '/profile/portfolio' as const },
+  { icon: 'briefcase-outline' as const, title: 'Browse open jobs', sub: 'See what\'s nearby now', to: '/(tabs)/contractor-home' as const },
 ];
 
 export default function VerificationGate({ visible, status, companyName, rejectionReason, onClose }: Props) {
@@ -81,7 +93,7 @@ export default function VerificationGate({ visible, status, companyName, rejecti
                 <Ionicons
                   name={isNotSubmitted ? 'ribbon-outline' : isRejected ? 'close-circle-outline' : 'time-outline'}
                   size={40}
-                  color={isNotSubmitted ? C.orange : isRejected ? '#EF4444' : '#FBBF24'}
+                  color={isNotSubmitted ? C.orange : isRejected ? OC.error : OC.warning}
                 />
               </View>
 
@@ -121,15 +133,15 @@ export default function VerificationGate({ visible, status, companyName, rejecti
             {isPending && (
               <View style={[styles.timelineBox, { backgroundColor: C.surfaceAlt, borderColor: C.border }]}>
                 {[
-                  { icon:'checkmark-circle', color:'#22C55E', label:'Application submitted',    done: true  },
-                  { icon:'time',             color:'#FBBF24', label:'Under review — usually 72h', done: false },
+                  { icon:'checkmark-circle', color: OC.success, label:'Application submitted',    done: true  },
+                  { icon:'time',             color: OC.warning, label:'Under review — usually 72h', done: false },
                   { icon:'notifications',    color: C.textMuted, label:'You get notified when approved', done: false },
                   { icon:'flash',            color: C.textMuted, label:'Full access to job feed',         done: false },
                 ].map((step, i) => (
                   <View key={i} style={styles.timelineRow}>
                     <View style={{ alignItems:'center', width: 28 }}>
                       <Ionicons name={step.icon as any} size={20} color={step.color} />
-                      {i < 3 && <View style={[styles.timelineLine, { backgroundColor: i < 1 ? '#22C55E40' : C.border }]} />}
+                      {i < 3 && <View style={[styles.timelineLine, { backgroundColor: i < 1 ? `${OC.success}40` : C.border }]} />}
                     </View>
                     <Text style={[styles.timelineText, { color: step.done ? C.textPrimary : C.textSecondary }]}>
                       {step.label}
@@ -139,14 +151,12 @@ export default function VerificationGate({ visible, status, companyName, rejecti
               </View>
             )}
 
-            {/* Rejected — show the reason */}
+            {/* Rejected — show the reason as a rule, not a filled box
+                (rule 3: status is a rule and text, never a fill) */}
             {isRejected && rejectionReason && (
-              <View style={[styles.rejectionBox, { backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.25)' }]}>
-                <Ionicons name="alert-circle-outline" size={16} color="#EF4444" />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.rejectionLabel}>REASON</Text>
-                  <Text style={styles.rejectionText}>{rejectionReason}</Text>
-                </View>
+              <View style={[styles.statusRule, { borderLeftColor: OC.error }]}>
+                <Text style={styles.rejectionLabel}>REASON</Text>
+                <Text style={styles.rejectionText}>{rejectionReason}</Text>
               </View>
             )}
 
@@ -158,7 +168,7 @@ export default function VerificationGate({ visible, status, companyName, rejecti
                   onPress={() => router.push('/profile/get-verified')}
                   activeOpacity={0.85}
                 >
-                  <Ionicons name="ribbon-outline" size={18} color="#fff" />
+                  <Ionicons name="ribbon-outline" size={18} color={OC.white} />
                   <Text style={styles.primaryBtnText}>Start Verification</Text>
                 </TouchableOpacity>
                 <Text style={[styles.estimateText, { color: C.textMuted }]}>
@@ -171,20 +181,40 @@ export default function VerificationGate({ visible, status, companyName, rejecti
                 onPress={() => router.push('/profile/get-verified')}
                 activeOpacity={0.85}
               >
-                <Ionicons name="refresh-outline" size={18} color="#fff" />
+                <Ionicons name="refresh-outline" size={18} color={OC.white} />
                 <Text style={styles.primaryBtnText}>Resubmit Verification</Text>
               </TouchableOpacity>
             ) : (
               <>
-                <View style={[styles.pendingNote, { backgroundColor: 'rgba(251,191,36,0.08)', borderColor: 'rgba(251,191,36,0.25)' }]}>
-                  <Ionicons name="information-circle-outline" size={15} color="#FBBF24" />
-                  <Text style={[styles.pendingNoteText, { color: '#FBBF24' }]}>
+                <View style={[styles.statusRule, { borderLeftColor: OC.warning }]}>
+                  <Text style={[styles.pendingNoteText, { color: OC.warning }]}>
                     Approvals happen Monday–Friday. If it's been over 72 hours, contact support@tradease.app.
                   </Text>
                 </View>
+
+                {/* Something to do instead of just waiting. */}
+                <Text style={[styles.nextStepsLabel, { color: C.textMuted }]}>WHILE YOU WAIT</Text>
+                {NEXT_STEPS.map(item => (
+                  <TouchableOpacity
+                    key={item.to}
+                    style={[styles.nextStepRow, { backgroundColor: C.surfaceAlt, borderColor: C.border }]}
+                    onPress={() => { onClose?.(); router.push(item.to as any); }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.nextStepIcon, { backgroundColor: 'rgba(255,98,0,0.12)' }]}>
+                      <Ionicons name={item.icon} size={18} color={C.orange} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.nextStepTitle, { color: C.textPrimary }]}>{item.title}</Text>
+                      <Text style={[styles.nextStepSub, { color: C.textMuted }]}>{item.sub}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={C.textMuted} />
+                  </TouchableOpacity>
+                ))}
+
                 <TouchableOpacity
-                  style={[styles.secondaryBtn, { borderColor: C.border }]}
-                  onPress={() => router.push('/profile/contact')}
+                  onPress={() => { onClose?.(); router.push('/profile/contact'); }}
+                  style={styles.contactLink}
                 >
                   <Text style={[styles.secondaryBtnText, { color: C.textSecondary }]}>Contact Support</Text>
                 </TouchableOpacity>
@@ -209,32 +239,41 @@ export default function VerificationGate({ visible, status, companyName, rejecti
 
 const styles = StyleSheet.create({
   scrim:            { flex:1, justifyContent:'flex-end' },
-  sheet:            { borderTopLeftRadius:28, borderTopRightRadius:28, borderTopWidth:0.5, borderLeftWidth:0.5, borderRightWidth:0.5, paddingTop:10, paddingHorizontal:20, maxHeight:'90%' },
+  sheet:            { borderTopLeftRadius:28, borderTopRightRadius:28, borderTopWidth:0.5, borderLeftWidth:0.5, borderRightWidth:0.5, paddingTop:OS.md, paddingHorizontal:OS.xl, maxHeight:'90%' },
   handle:           { width:36, height:4, borderRadius:2, alignSelf:'center', marginBottom:20 },
   closeBtn:         { position:'absolute', top:6, right:0, width:32, height:32, alignItems:'center', justifyContent:'center' },
   hero:             { alignItems:'center', marginBottom:24 },
   heroIcon:         { width:88, height:88, borderRadius:44, borderWidth:1, alignItems:'center', justifyContent:'center', marginBottom:18 },
-  heroTitle:        { fontSize:22, fontWeight:'800', textAlign:'center', marginBottom:10, letterSpacing:-0.3 },
-  heroSub:          { fontSize:14, textAlign:'center', lineHeight:22 },
-  requirementsBox:  { borderRadius:16, borderWidth:0.5, padding:16, marginBottom:24, gap:12 },
-  requirementsTitle:{ fontSize:11, fontWeight:'700', letterSpacing:0.8, marginBottom:4 },
+  heroTitle:        { fontSize:FS.xxl, fontWeight:'800', textAlign:'center', marginBottom:10, letterSpacing:-0.3 },
+  heroSub:          { fontSize:FS.md, textAlign:'center', lineHeight:22 },
+  requirementsBox:  { borderRadius:16, borderWidth:0.5, padding:OS.lgXl, marginBottom:24, gap:12 },
+  requirementsTitle:{ fontSize:FS.xs, fontWeight:'700', letterSpacing:0.8, marginBottom:4 },
   requirementRow:   { flexDirection:'row', alignItems:'center', gap:12 },
   requirementIcon:  { width:30, height:30, borderRadius:8, alignItems:'center', justifyContent:'center' },
-  requirementText:  { fontSize:14, fontWeight:'500', flex:1 },
-  timelineBox:      { borderRadius:16, borderWidth:0.5, padding:16, marginBottom:24, gap:0 },
-  rejectionBox:     { flexDirection:'row', gap:12, borderRadius:12, borderWidth:1, padding:14, marginBottom:24, alignItems:'flex-start' },
-  rejectionLabel:   { fontSize:11, fontWeight:'800', color:'#EF4444', letterSpacing:0.5, marginBottom:4 },
-  rejectionText:    { fontSize:13, color:'#EF4444', lineHeight:20 },
-  timelineRow:      { flexDirection:'row', alignItems:'flex-start', gap:12, paddingBottom:4 },
+  requirementText:  { fontSize:FS.md, fontWeight:'500', flex:1 },
+  timelineBox:      { borderRadius:16, borderWidth:0.5, padding:OS.lgXl, marginBottom:24, gap:0 },
+  // Left-rule status treatment (rule 3) -- shared by the rejected-reason
+  // and pending-approvals-note states, replacing what were two separate
+  // filled/bordered boxes.
+  statusRule:       { borderLeftWidth:3, paddingLeft:OS.lg, paddingVertical:OS.xxxs, marginBottom:16 },
+  rejectionLabel:   { fontSize:FS.xs, fontWeight:'800', color:OC.error, letterSpacing:0.5, marginBottom:4 },
+  rejectionText:    { fontSize:FS.base, color:OC.error, lineHeight:20 },
+  timelineRow:      { flexDirection:'row', alignItems:'flex-start', gap:12, paddingBottom:OS.xxs },
   timelineLine:     { width:1, height:20, marginTop:4 },
-  timelineText:     { fontSize:14, paddingTop:2, flex:1 },
-  primaryBtn:       { borderRadius:14, paddingVertical:16, flexDirection:'row', alignItems:'center', justifyContent:'center', gap:8, marginBottom:10 },
-  primaryBtnText:   { fontSize:16, fontWeight:'800', color:'#fff' },
-  estimateText:     { fontSize:12, textAlign:'center', marginBottom:20 },
-  pendingNote:      { flexDirection:'row', gap:10, borderRadius:12, borderWidth:1, padding:14, marginBottom:14, alignItems:'flex-start' },
-  pendingNoteText:  { flex:1, fontSize:13, lineHeight:19 },
-  secondaryBtn:     { borderRadius:14, paddingVertical:14, alignItems:'center', borderWidth:1, marginBottom:20 },
-  secondaryBtnText: { fontSize:15, fontWeight:'600' },
-  legalBox:         { flexDirection:'row', gap:8, borderTopWidth:0.5, paddingTop:16, alignItems:'flex-start' },
-  legalText:        { flex:1, fontSize:11, lineHeight:17 },
+  timelineText:     { fontSize:FS.md, paddingTop:OS.xxxs, flex:1 },
+  primaryBtn:       { borderRadius:14, paddingVertical:OS.lgXl, flexDirection:'row', alignItems:'center', justifyContent:'center', gap:8, marginBottom:10 },
+  primaryBtnText:   { fontSize:FS.xl, fontWeight:'800', color:OC.white },
+  estimateText:     { fontSize:FS.sm, textAlign:'center', marginBottom:20 },
+  pendingNoteText:  { flex:1, fontSize:FS.base, lineHeight:19 },
+  // "While you wait" next-step rows (rule 2: cards are for things you can
+  // tap) and the quieter fallback link beneath them.
+  nextStepsLabel:   { fontSize:FS.xs, fontWeight:'700', letterSpacing:0.8, marginBottom:8 },
+  nextStepRow:      { flexDirection:'row', alignItems:'center', gap:12, padding:OS.lg, borderRadius:12, borderWidth:0.5, marginBottom:8 },
+  nextStepIcon:     { width:36, height:36, borderRadius:10, alignItems:'center', justifyContent:'center' },
+  nextStepTitle:    { fontSize:FS.base, fontWeight:'700' },
+  nextStepSub:      { fontSize:FS.xs, marginTop:1 },
+  contactLink:      { alignItems:'center', paddingVertical:OS.lg, marginBottom:12 },
+  secondaryBtnText: { fontSize:FS.lg, fontWeight:'600' },
+  legalBox:         { flexDirection:'row', gap:8, borderTopWidth:0.5, paddingTop:OS.lgXl, alignItems:'flex-start' },
+  legalText:        { flex:1, fontSize:FS.xs, lineHeight:17 },
 });

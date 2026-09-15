@@ -113,3 +113,20 @@ export const OnboardingSpacing = {
    * rather than a magic number in the file. */
   footerPad: 34,
 } as const;
+
+/**
+ * fontSize-only scale (no paired weight/family) for funnel screens that
+ * set fontWeight as a plain string literal directly (VerificationGate,
+ * verification-status) rather than through FontFamily (signup) or a
+ * Font.* alias with a local TY scale (get-verified). Font weight itself
+ * isn't tokenized here -- out of scope (raw hex/fontSize/padding only).
+ */
+export const FontSize = {
+  xs: 11,
+  sm: 12,
+  base: 13,
+  md: 14,
+  lg: 15,
+  xl: 16,
+  xxl: 22,
+} as const;
