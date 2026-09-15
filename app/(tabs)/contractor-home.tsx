@@ -12,6 +12,7 @@ import { deriveChatId } from '@/lib/messageService';
 import { startLiveTracking, stopLiveTracking } from '@/lib/locationService';
 import { haversine } from '@/lib/geo';
 import { formatReopensIn } from '@/lib/time';
+import { OnboardingColors as OC, OnboardingSpacing as OS2, FontSize as FS } from '@/lib/design/onboarding-tokens';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -123,7 +124,7 @@ function OfferCard({ offer, onRespond, C }: {
   const quotedPrice  = offer.quoted_price ?? 0;
 
   return (
-    <View style={[oc.card, { backgroundColor: C.surface, borderColor: isCountered ? '#FBBF24' : C.border }]}>
+    <View style={[oc.card, { backgroundColor: C.surface, borderColor: isCountered ? OC.warning : C.border }]}>
       {isCountered && (
         <View style={oc.counterBadge}>
           <Text style={oc.counterBadgeText}>⚡ Counter Received</Text>
@@ -143,7 +144,7 @@ function OfferCard({ offer, onRespond, C }: {
             <Text style={[oc.arrow, { color: C.textMuted }]}>→</Text>
             <View style={oc.priceItem}>
               <Text style={[oc.priceLabel, { color: C.textMuted }]}>CUSTOMER COUNTER</Text>
-              <Text style={[oc.priceValue, { color: '#FBBF24' }]}>${counterPrice.toLocaleString()}</Text>
+              <Text style={[oc.priceValue, { color: OC.warning }]}>${counterPrice.toLocaleString()}</Text>
             </View>
           </>
         )}
@@ -177,25 +178,25 @@ function OfferCard({ offer, onRespond, C }: {
 }
 
 const oc = StyleSheet.create({
-  card:           { borderRadius: 16, borderWidth: 1, padding: 14, marginBottom: 10 },
-  counterBadge:   { backgroundColor: 'rgba(251,191,36,0.12)', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start', marginBottom: 8 },
-  counterBadgeText:{ fontSize: 11, fontWeight: '800', color: '#FBBF24' },
-  trade:          { fontSize: 15, fontWeight: '800', marginBottom: 2 },
-  desc:           { fontSize: 13, lineHeight: 18, marginBottom: 8 },
+  card:           { borderRadius: 16, borderWidth: 1, padding: OS2.lg, marginBottom: 10 },
+  counterBadge:   { backgroundColor: 'rgba(251,191,36,0.12)', borderRadius: 6, paddingHorizontal: OS2.sm, paddingVertical: OS2.xxxsPlus, alignSelf: 'flex-start', marginBottom: 8 },
+  counterBadgeText:{ fontSize: FS.xs, fontWeight: '800', color: OC.warning },
+  trade:          { fontSize: FS.lg, fontWeight: '800', marginBottom: 2 },
+  desc:           { fontSize: FS.base, lineHeight: 18, marginBottom: 8 },
   priceRow:       { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
   priceItem:      { flex: 1 },
-  priceLabel:     { fontSize: 10, fontWeight: '700', letterSpacing: 0.5, marginBottom: 2 },
-  priceValue:     { fontSize: 18, fontWeight: '900' },
-  arrow:          { fontSize: 18, fontWeight: '700' },
-  note:           { fontSize: 12, fontStyle: 'italic', marginBottom: 8 },
+  priceLabel:     { fontSize: FS.xxs, fontWeight: '700', letterSpacing: 0.5, marginBottom: 2 },
+  priceValue:     { fontSize: FS.xl3, fontWeight: '900' },
+  arrow:          { fontSize: FS.xl3, fontWeight: '700' },
+  note:           { fontSize: FS.sm, fontStyle: 'italic', marginBottom: 8 },
   actions:        { flexDirection: 'row', gap: 10 },
-  btn:            { flex: 1, paddingVertical: 11, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  declineBtn:     { backgroundColor: '#1A1A1A', borderWidth: 1, borderColor: '#2A2A2A' },
-  declineBtnText: { fontSize: 14, fontWeight: '600', color: '#666' },
-  acceptBtn:      { backgroundColor: '#22C55E' },
-  acceptBtnText:  { fontSize: 14, fontWeight: '800', color: '#fff' },
+  btn:            { flex: 1, paddingVertical: OS2.md2, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  declineBtn:     { backgroundColor: OC.surface, borderWidth: 1, borderColor: OC.disabledBorder },
+  declineBtnText: { fontSize: FS.md, fontWeight: '600', color: OC.captionText },
+  acceptBtn:      { backgroundColor: OC.success },
+  acceptBtnText:  { fontSize: FS.md, fontWeight: '800', color: OC.white },
   waitingRow:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  waitingText:    { fontSize: 12 },
+  waitingText:    { fontSize: FS.sm },
 });
 
 // ─── Declined Offer Card ──────────────────────────────────────────────────────
@@ -228,7 +229,7 @@ function DeclinedOfferCard({ offer, onDelete, C }: {
       <View style={dc.header}>
         <View style={dc.badge}><Text style={dc.badgeText}>DECLINED</Text></View>
         <TouchableOpacity style={dc.deleteBtn} onPress={() => onDelete(offer.id)}>
-          <Ionicons name="trash-outline" size={14} color="#EF4444" />
+          <Ionicons name="trash-outline" size={14} color={OC.error} />
           <Text style={dc.timer}>{countdown}</Text>
         </TouchableOpacity>
       </View>
@@ -245,17 +246,17 @@ function DeclinedOfferCard({ offer, onDelete, C }: {
 }
 
 const dc = StyleSheet.create({
-  card:       { borderRadius: 16, borderWidth: 1, padding: 14, marginBottom: 10 },
+  card:       { borderRadius: 16, borderWidth: 1, padding: OS2.lg, marginBottom: 10 },
   header:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  badge:      { backgroundColor: 'rgba(239,68,68,0.12)', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText:  { fontSize: 11, fontWeight: '800', color: '#EF4444' },
-  deleteBtn:  { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)' },
-  timer:      { fontSize: 11, fontWeight: '700', color: '#EF4444' },
-  trade:      { fontSize: 15, fontWeight: '800', marginBottom: 2 },
-  desc:       { fontSize: 13, lineHeight: 18, marginBottom: 8 },
+  badge:      { backgroundColor: 'rgba(239,68,68,0.12)', borderRadius: 6, paddingHorizontal: OS2.sm, paddingVertical: OS2.xxxsPlus },
+  badgeText:  { fontSize: FS.xs, fontWeight: '800', color: OC.error },
+  deleteBtn:  { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: 8, paddingHorizontal: OS2.sm, paddingVertical: OS2.xxs, borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)' },
+  timer:      { fontSize: FS.xs, fontWeight: '700', color: OC.error },
+  trade:      { fontSize: FS.lg, fontWeight: '800', marginBottom: 2 },
+  desc:       { fontSize: FS.base, lineHeight: 18, marginBottom: 8 },
   priceRow:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  priceLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-  price:      { fontSize: 16, fontWeight: '800' },
+  priceLabel: { fontSize: FS.xxs, fontWeight: '700', letterSpacing: 0.5 },
+  price:      { fontSize: FS.xl, fontWeight: '800' },
 });
 
 // ─── Quote Bottom Sheet ───────────────────────────────────────────────────────
@@ -1158,8 +1159,8 @@ export default function ContractorHomeScreen() {
           <>
             {/* Missed money banner */}
             {missedJobs && isOwner && (
-              <View style={[styles.missedBanner, { backgroundColor: '#EF444412', borderColor: '#EF444430' }]}>
-                <Ionicons name="wallet-outline" size={18} color="#EF4444" />
+              <View style={[styles.missedBanner, { backgroundColor: `${OC.error}12`, borderColor: `${OC.error}30` }]}>
+                <Ionicons name="wallet-outline" size={18} color={OC.error} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.missedTitle}>
                     You missed {missedJobs.count} job{missedJobs.count > 1 ? 's' : ''} worth ~{fmt(missedJobs.value)} while offline
@@ -1275,7 +1276,7 @@ export default function ContractorHomeScreen() {
         )}
         ListEmptyComponent={() => (
           <View style={styles.emptyState}>
-            <Text style={{ fontSize: 36, marginBottom: 12 }}>🔍</Text>
+            <Text style={{ fontSize: FS.emoji, marginBottom: 12 }}>🔍</Text>
             <Text style={[styles.emptyTitle, { color: C.textPrimary }]}>No jobs right now</Text>
             <Text style={[styles.emptyText, { color: C.textMuted }]}>
               {isOwner && !contractor?.is_available
@@ -1348,25 +1349,25 @@ function makeStyles(C: any) {
     bellBtn:      { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
     bellBadge:    { position: 'absolute', top: 0, right: 0, minWidth: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
     bellBadgeText:{ fontSize: 9, fontWeight: '800', color: '#fff' },
-    statsBar:     { flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 0.5 },
+    statsBar:     { flexDirection: 'row', paddingVertical: OS2.md, borderBottomWidth: 0.5 },
     statItem:     { flex: 1, alignItems: 'center', gap: 3 },
-    statValue:    { fontSize: 15, fontWeight: '800' },
-    statLabel:    { fontSize: 10, fontWeight: '600' },
-    missedBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 14, marginTop: 14 },
-    missedTitle:  { fontSize: 13, fontWeight: '700', color: '#EF4444', lineHeight: 18 },
-    missedSub:    { fontSize: 12, color: '#EF4444', opacity: 0.7, marginTop: 2 },
-    missedCta:    { fontSize: 13, fontWeight: '800', color: '#EF4444' },
+    statValue:    { fontSize: FS.lg, fontWeight: '800' },
+    statLabel:    { fontSize: FS.xxs, fontWeight: '600' },
+    missedBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, borderWidth: 1, padding: OS2.lg, marginBottom: 14, marginTop: 14 },
+    missedTitle:  { fontSize: FS.base, fontWeight: '700', color: OC.error, lineHeight: 18 },
+    missedSub:    { fontSize: FS.sm, color: OC.error, opacity: 0.7, marginTop: 2 },
+    missedCta:    { fontSize: FS.base, fontWeight: '800', color: OC.error },
     chip:         { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 20, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 8 },
     chipText:     { fontSize: 13, fontWeight: '600' },
     feedHeader:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
     feedLiveDot:  { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' },
-    feedTitle:    { fontSize: 16, fontWeight: '800', flex: 1 },
+    feedTitle:    { fontSize: FS.xl, fontWeight: '800', flex: 1 },
     feedCount:    { fontSize: 13 },
-    emptyState:   { alignItems: 'center', paddingVertical: 48, paddingHorizontal: 24 },
-    emptyTitle:   { fontSize: 18, fontWeight: '700', marginBottom: 8 },
-    emptyText:    { fontSize: 14, textAlign: 'center', lineHeight: 22 },
-    goOnlineBtn:  { marginTop: 20, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 28 },
-    goOnlineText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+    emptyState:   { alignItems: 'center', paddingVertical: OS2.xxl2, paddingHorizontal: OS2.xl2 },
+    emptyTitle:   { fontSize: FS.xl3, fontWeight: '700', marginBottom: 8 },
+    emptyText:    { fontSize: FS.md, textAlign: 'center', lineHeight: 22 },
+    goOnlineBtn:  { marginTop: 20, borderRadius: 14, paddingVertical: OS2.lg, paddingHorizontal: OS2.xl3 },
+    goOnlineText: { fontSize: FS.lg, fontWeight: '700', color: OC.white },
     activeJobCard:        { borderRadius: 14, borderWidth: 1, marginBottom: 10, overflow: 'hidden' },
     activeJobRow:         { flexDirection: 'row' as const, alignItems: 'flex-start' as const, padding: 14, gap: 12 },
     activeJobTrade:       { fontSize: 15, fontWeight: '800' as const, marginBottom: 2 },

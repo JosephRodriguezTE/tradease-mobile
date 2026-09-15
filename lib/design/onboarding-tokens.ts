@@ -107,12 +107,15 @@ export const OnboardingSpacing = {
   sm: 8,
   smMd: 9,
   md: 10,
+  md2: 11,
   mdLg: 12,
   lg: 14,
   lgXl: 16,
   xl: 20,
   xl2: 24,
+  xl3: 28,
   xxl: 40,
+  xxl2: 48,
   /** get-verified.tsx's footer safe-bottom padding -- a one-off, not part
    * of the scale's progression, but still a real value that needs a name
    * rather than a magic number in the file. */
@@ -138,4 +141,7 @@ export const FontSize = {
   xl3: 18,
   xl4: 20,
   xxl: 22,
+  /** contractor-home.tsx's empty-state emoji -- a one-off, not part of
+   * the scale's progression. */
+  emoji: 36,
 } as const;
