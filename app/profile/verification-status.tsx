@@ -9,42 +9,54 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Font } from '../../constants/theme';
+import { OnboardingColors as OC, OnboardingSpacing as OS2, FontSize as FS } from '@/lib/design/onboarding-tokens';
 
 const SP = { 2:8,3:12,4:16,5:20,6:24,8:32,10:40 } as const;
-const TY = { xs:11,sm:13,base:15,md:17,lg:20,xl:24,'2xl':30 } as const;
 
 type VerificationStatus = 'unverified' | 'pending_review' | 'approved' | 'rejected';
 
 const STATUS_CONFIG = {
   unverified: {
     icon:    'shield-outline',
-    color:   '#9A9A9A',
+    color:   OC.textSecondary,
     bg:      'rgba(154,154,154,0.1)',
     title:   'Not Verified',
     message: 'Complete the verification process to unlock the Tradease Verified badge and build trust with customers.',
   },
   pending_review: {
     icon:    'time-outline',
-    color:   '#FBBF24',
+    color:   OC.warning,
     bg:      'rgba(251,191,36,0.1)',
     title:   'Under Review',
     message: 'Your application is being reviewed by our team. This typically takes less than 72 hours. We\'ll notify you when it\'s approved.',
   },
   approved: {
     icon:    'shield-checkmark',
-    color:   '#22C55E',
+    color:   OC.success,
     bg:      'rgba(34,197,94,0.1)',
     title:   'Tradease Verified ✓',
     message: 'Your profile has been verified. Customers can see your verified badge when browsing contractors.',
   },
   rejected: {
     icon:    'close-circle-outline',
-    color:   '#EF4444',
+    color:   OC.error,
     bg:      'rgba(239,68,68,0.1)',
     title:   'Verification Rejected',
     message: 'Your application was not approved. See the reason below and resubmit with corrected information.',
   },
 };
+
+// Same three while-you-wait actions as VerificationGate's pending_review
+// state and get-verified.tsx's post-submit screen -- this is now a third
+// independent copy (each file already had its own before this touched
+// screen was added). Not extracted to a shared constant here: doing so
+// would mean reopening those two already-committed files, which wasn't
+// asked for. Flagged as duplication debt, not fixed silently.
+const NEXT_STEPS = [
+  { icon: 'business-outline' as const, title: 'Build your company profile', sub: 'Services, service area, and pricing', to: '/profile/company-profile' as const },
+  { icon: 'images-outline' as const, title: 'Add portfolio photos', sub: 'Customers see this before anything else', to: '/profile/portfolio' as const },
+  { icon: 'briefcase-outline' as const, title: 'Browse open jobs', sub: 'See what\'s nearby now', to: '/(tabs)/contractor-home' as const },
+];
 
 const CHECKLIST = [
   { key:'legal_name',        label:'Legal name',          field:'legal_name' },
@@ -143,14 +155,39 @@ export default function VerificationStatusScreen() {
           )}
         </View>
 
-        {/* Rejection reason */}
+        {/* Rejection reason -- a rule, not a filled box (rule 3: status is
+            a rule and text, never a fill) */}
         {status === 'rejected' && profile?.verification_rejection_reason && (
-          <View style={[s.rejectionBox, { backgroundColor:'rgba(239,68,68,0.08)', borderColor:'rgba(239,68,68,0.25)' }]}>
-            <Ionicons name="alert-circle-outline" size={16} color="#EF4444" />
-            <View style={{ flex:1 }}>
-              <Text style={{ fontSize:TY.xs, fontWeight:Font.black, color:'#EF4444', letterSpacing:0.5, marginBottom:4 }}>REASON</Text>
-              <Text style={{ fontSize:TY.sm, color:'#EF4444', lineHeight:20 }}>{profile.verification_rejection_reason}</Text>
-            </View>
+          <View style={[s.statusRule, { borderLeftColor: OC.error }]}>
+            <Text style={{ fontSize:FS.xs, fontWeight:Font.black, color: OC.error, letterSpacing:0.5, marginBottom:4 }}>REASON</Text>
+            <Text style={{ fontSize:FS.base, color: OC.error, lineHeight:20 }}>{profile.verification_rejection_reason}</Text>
+          </View>
+        )}
+
+        {/* While you wait -- pending_review otherwise has no action at all
+            on this screen (no CTA renders for it below), just a hero and
+            a checklist. Same dead-end this funnel had in get-verified.tsx
+            and VerificationGate. */}
+        {status === 'pending_review' && (
+          <View style={{ marginTop:SP[5] }}>
+            <Text style={[s.sectionLabel, { color:C.textMuted }]}>WHILE YOU WAIT</Text>
+            {NEXT_STEPS.map(item => (
+              <TouchableOpacity
+                key={item.to}
+                style={[s.nextStepRow, { backgroundColor:C.surface, borderColor:C.border }]}
+                onPress={() => router.push(item.to as any)}
+                activeOpacity={0.7}
+              >
+                <View style={[s.nextStepIcon, { backgroundColor: 'rgba(255,98,0,0.12)' }]}>
+                  <Ionicons name={item.icon} size={18} color={C.orange} />
+                </View>
+                <View style={{ flex:1 }}>
+                  <Text style={[s.checkLabel, { color:C.textPrimary }]}>{item.title}</Text>
+                  <Text style={{ fontSize:FS.xs, color:C.textMuted, marginTop:1 }}>{item.sub}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={C.textMuted} />
+              </TouchableOpacity>
+            ))}
           </View>
         )}
 
@@ -168,12 +205,12 @@ export default function VerificationStatusScreen() {
                       <Ionicons
                         name={done ? 'checkmark-circle' : 'ellipse-outline'}
                         size={20}
-                        color={done ? '#22C55E' : C.textMuted}
+                        color={done ? OC.success : C.textMuted}
                       />
                       <Text style={[s.checkLabel, { color: done ? C.textPrimary : C.textMuted }]}>
                         {item.label}
                       </Text>
-                      {!done && <Text style={{ fontSize:TY.xs, color:C.orange, fontWeight:Font.bold }}>Missing</Text>}
+                      {!done && <Text style={{ fontSize:FS.xs, color:C.orange, fontWeight:Font.bold }}>Missing</Text>}
                     </View>
                   </View>
                 );
@@ -188,10 +225,10 @@ export default function VerificationStatusScreen() {
             <Text style={[s.sectionLabel, { color:C.textMuted }]}>WHAT YOU UNLOCKED</Text>
             <View style={[s.card, { backgroundColor:C.surface, borderColor:C.border }]}>
               {[
-                { icon:'shield-checkmark', color:'#22C55E', text:'Verified badge on your profile' },
+                { icon:'shield-checkmark', color: OC.success, text:'Verified badge on your profile' },
                 { icon:'trending-up',      color:C.orange,  text:'Higher ranking in search results' },
-                { icon:'star',             color:'#FBBF24', text:'Customer trust signal' },
-                { icon:'lock-closed',      color:'#60A5FA', text:'Tradease payment protection' },
+                { icon:'star',             color: OC.warning, text:'Customer trust signal' },
+                { icon:'lock-closed',      color: OC.info, text:'Tradease payment protection' },
               ].map((item, i) => (
                 <View key={item.text}>
                   {i > 0 && <View style={[s.divider, { backgroundColor:C.border }]} />}
@@ -213,7 +250,7 @@ export default function VerificationStatusScreen() {
             style={[s.ctaBtn, { backgroundColor:C.orange }]}
             onPress={() => router.push('/profile/get-verified')}
           >
-            <Ionicons name="ribbon-outline" size={18} color="#fff" />
+            <Ionicons name="ribbon-outline" size={18} color={OC.white} />
             <Text style={s.ctaBtnText}>
               {status === 'rejected' ? 'Resubmit Verification' : 'Start Verification'}
             </Text>
@@ -227,21 +264,28 @@ export default function VerificationStatusScreen() {
 
 const s = StyleSheet.create({
   container:    { flex:1 },
-  header:       { flexDirection:'row', alignItems:'center', justifyContent:'space-between', paddingHorizontal:20, paddingVertical:14, borderBottomWidth:0.5 },
+  header:       { flexDirection:'row', alignItems:'center', justifyContent:'space-between', paddingHorizontal:OS2.xl, paddingVertical:OS2.lg, borderBottomWidth:0.5 },
   backBtn:      { width:36, height:36, alignItems:'center', justifyContent:'center' },
-  headerTitle:  { fontSize:17, fontWeight:'700', letterSpacing:-0.3 },
-  heroCard:     { borderRadius:20, borderWidth:1, padding:24, alignItems:'center', gap:12 },
+  headerTitle:  { fontSize:FS.xl2, fontWeight:'700', letterSpacing:-0.3 },
+  heroCard:     { borderRadius:20, borderWidth:1, padding:OS2.xl2, alignItems:'center', gap:12 },
   heroIcon:     { width:72, height:72, borderRadius:36, alignItems:'center', justifyContent:'center' },
-  heroTitle:    { fontSize:22, fontWeight:'800', textAlign:'center' },
-  heroMessage:  { fontSize:14, lineHeight:22, textAlign:'center' },
-  heroDate:     { fontSize:12, marginTop:4 },
-  rejectionBox: { flexDirection:'row', gap:12, borderRadius:12, borderWidth:1, padding:14, marginTop:16, alignItems:'flex-start' },
-  sectionLabel: { fontSize:11, fontWeight:'700', letterSpacing:0.8, marginBottom:10 },
+  heroTitle:    { fontSize:FS.xxl, fontWeight:'800', textAlign:'center' },
+  heroMessage:  { fontSize:FS.md, lineHeight:22, textAlign:'center' },
+  heroDate:     { fontSize:FS.sm, marginTop:4 },
+  // Left-rule status treatment (rule 3) -- replaces the filled rejection
+  // box; shared shape for any future left-rule callout on this screen.
+  statusRule:   { borderLeftWidth:3, paddingLeft:OS2.lg, paddingVertical:OS2.xxxs, marginTop:16 },
+  sectionLabel: { fontSize:FS.xs, fontWeight:'700', letterSpacing:0.8, marginBottom:10 },
   card:         { borderRadius:16, borderWidth:0.5, overflow:'hidden' },
-  checkRow:     { flexDirection:'row', alignItems:'center', gap:12, paddingHorizontal:16, paddingVertical:14 },
-  checkLabel:   { flex:1, fontSize:14, fontWeight:'500' },
+  checkRow:     { flexDirection:'row', alignItems:'center', gap:12, paddingHorizontal:OS2.lgXl, paddingVertical:OS2.lg },
+  checkLabel:   { flex:1, fontSize:FS.md, fontWeight:'500' },
   divider:      { height:0.5, marginHorizontal:16 },
-  footer:       { paddingHorizontal:20, paddingBottom:34, paddingTop:12, borderTopWidth:0.5 },
-  ctaBtn:       { borderRadius:14, paddingVertical:16, flexDirection:'row', alignItems:'center', justifyContent:'center', gap:8 },
-  ctaBtnText:   { fontSize:16, fontWeight:'700', color:'#fff' },
+  // "While you wait" next-step rows (rule 2: cards are for things you can
+  // tap) -- same shape as the checklist card's rows, but each is its own
+  // bordered, tappable row rather than a shared list container.
+  nextStepRow:  { flexDirection:'row', alignItems:'center', gap:12, padding:OS2.lg, borderRadius:12, borderWidth:0.5, marginBottom:8 },
+  nextStepIcon: { width:36, height:36, borderRadius:10, alignItems:'center', justifyContent:'center' },
+  footer:       { paddingHorizontal:OS2.xl, paddingBottom:OS2.footerPad, paddingTop:OS2.mdLg, borderTopWidth:0.5 },
+  ctaBtn:       { borderRadius:14, paddingVertical:OS2.lgXl, flexDirection:'row', alignItems:'center', justifyContent:'center', gap:8 },
+  ctaBtnText:   { fontSize:FS.xl, fontWeight:'700', color: OC.white },
 });

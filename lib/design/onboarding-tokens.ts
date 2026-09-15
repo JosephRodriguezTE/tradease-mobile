@@ -35,6 +35,7 @@ export const OnboardingColors = {
   warning:     DarkColors.warning,
   textPrimary: DarkColors.textPrimary,
   textMuted:   DarkColors.textMuted,
+  textSecondary: DarkColors.textSecondary,
   surface:     DarkColors.surface,
   surfaceAlt:  DarkColors.surfaceAlt,
   orange:      DarkColors.orange,
@@ -55,6 +56,7 @@ export const OnboardingColors = {
   iconMuted:       '#888888',
   googleTextDark:  '#16A34A',
   gradientStart:   '#FF7A1F',
+  info:            '#60A5FA',
 } as const;
 
 /**
@@ -107,6 +109,7 @@ export const OnboardingSpacing = {
   lg: 14,
   lgXl: 16,
   xl: 20,
+  xl2: 24,
   xxl: 40,
   /** get-verified.tsx's footer safe-bottom padding -- a one-off, not part
    * of the scale's progression, but still a real value that needs a name
@@ -128,5 +131,6 @@ export const FontSize = {
   md: 14,
   lg: 15,
   xl: 16,
+  xl2: 17,
   xxl: 22,
 } as const;
