@@ -132,7 +132,12 @@ export default function TabsLayout() {
         name="map"
         options={{
           title: 'Map',
-          href: isContractor ? undefined : null,
+          // Previously hidden from customers (href: null) even though
+          // map.tsx already branches internally for customer/contractor/
+          // guest rendering and has no dependency on role to function.
+          // Registration order already places this second, right after
+          // Home, for both roles -- matches the contractor's existing
+          // Home/Map/Jobs/Messages/Profile order.
           tabBarIcon: ({ focused }) => <TabIcon Icon={MapPinned} focused={focused} />,
         }}
       />
