@@ -22,6 +22,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { DEFAULT_MAP_REGION, MAPBOX_ACCESS_TOKEN } from '@/lib/mapConfig';
 import { supabase } from '@/lib/supabase';
 import { Type as DesignType } from '@/lib/design/tokens';
+import { paymentProvider } from '@/lib/payment/mock';
 
 MapboxGL.setAccessToken(MAPBOX_ACCESS_TOKEN);
 
@@ -91,7 +92,7 @@ interface WoMedia {
 }
 
 interface PaymentIntent {
-  id: string; status: string; amount_cents: number;
+  id: string; status: string; amount_cents: number; provider?: string | null;
 }
 
 interface ContractorProfile {
@@ -267,8 +268,8 @@ const lm = StyleSheet.create({
 
 // ─── HeroSection ─────────────────────────────────────────────────────────────
 
-function HeroSection({ wo, eta, onLearnMore, heldCents, hasHold, onSecurePayment, securingPayment }: {
-  wo: WoData; eta: number | null; onLearnMore: () => void; heldCents: number; hasHold: boolean;
+function HeroSection({ wo, eta, onLearnMore, heldCents, hasHold, isMockPayment, onSecurePayment, securingPayment }: {
+  wo: WoData; eta: number | null; onLearnMore: () => void; heldCents: number; hasHold: boolean; isMockPayment: boolean;
   onSecurePayment?: () => void; securingPayment?: boolean;
 }) {
   const color      = STATUS_COLOR[wo.wo_status] ?? O.txt2;
@@ -280,6 +281,18 @@ function HeroSection({ wo, eta, onLearnMore, heldCents, hasHold, onSecurePayment
   return (
     <View style={s.card}>
       <View style={s.cardBody}>
+        {/* Dev-mode banner -- driven by the payment_intent's own provider
+            column, not an env flag, so it stays accurate for this specific
+            work order regardless of what today's build config is. Every
+            hold created today is mock (no real provider exists yet), so
+            this is just honest about that, not a novel warning. */}
+        {isMockPayment && (
+          <View style={s.mockBanner}>
+            <Ionicons name="flask-outline" size={13} color={O.txt2} />
+            <Text style={s.mockBannerText}>Dev mode · payment is simulated</Text>
+          </View>
+        )}
+
         {/* Status pill */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
           <View style={[s.heroPill, { backgroundColor: `${color}15`, borderColor: `${color}30` }]}>
@@ -1177,7 +1190,7 @@ export default function CustomerWorkOrderScreen() {
       supabase.from('contractors_public').select('id,company_name,username,avatar_url,rating,total_bookings,acceptance_rate,verification_status,license_verified,insured,trade_type,phone').eq('id', woData.contractor_id).maybeSingle(),
       supabase.from('payment_line_items').select('*').eq('work_order_id', woData.id).order('created_at'),
       woData.payment_intent_id
-        ? supabase.from('payment_intents').select('id,status,amount_cents').eq('id', woData.payment_intent_id).maybeSingle()
+        ? supabase.from('payment_intents').select('id,status,amount_cents,provider').eq('id', woData.payment_intent_id).maybeSingle()
         : { data: null },
       supabase.from('work_progress_items').select('*').eq('work_order_id', woData.id).order('sort_order'),
       supabase.from('work_order_events').select('*').eq('work_order_id', woData.id).order('created_at', { ascending: false }),
@@ -1303,36 +1316,44 @@ export default function CustomerWorkOrderScreen() {
     });
   }, [shareLocation]);
 
-  // ── Mock payment hold ─────────────────────────────────────────────────────
+  // ── Payment hold ──────────────────────────────────────────────────────────
+  // Routed through paymentProvider (lib/payment/mock.ts) instead of a direct
+  // insert -- this was the only place a payment_intents row got created
+  // without the 'mock' provider tag or a payment_events entry (audited
+  // every write site in both repos; the others -- handleApprove()'s
+  // capture below, and three sites in the website repo -- have the same
+  // gap and are not fixed here, out of scope for this change).
   const securePayment = useCallback(async () => {
     if (!wo) return;
     setSecuringPayment(true);
     try {
       const amount_cents = Math.round((wo.booking?.price_estimate ?? 0) * 100);
-      const { data: pi, error: piErr } = await supabase
-        .from('payment_intents')
-        .insert({
-          booking_id:   wo.booking_id,
-          customer_id:  wo.customer_id,
-          contractor_id: wo.contractor_id,
-          amount_cents: amount_cents || 0,
-          status:       'held',
-          held_at:      new Date().toISOString(),
-        })
-        .select('id,status,amount_cents')
-        .single();
+      const result = await paymentProvider.createHold({
+        bookingId:    wo.booking_id,
+        customerId:   wo.customer_id,
+        contractorId: wo.contractor_id,
+        amountCents:  amount_cents || 0,
+      });
 
-      if (piErr || !pi) throw new Error(piErr?.message ?? 'Payment failed');
+      if (result.status === 'hold_failed' || !result.intentId) {
+        throw new Error(result.error ?? 'Payment failed');
+      }
 
       const { error: woErr } = await supabase
         .from('work_orders')
-        .update({ payment_intent_id: pi.id, wo_status: 'deposit_secured' })
+        .update({ payment_intent_id: result.intentId, wo_status: 'deposit_secured' })
         .eq('id', wo.id);
 
       if (woErr) throw new Error(woErr.message);
 
-      setWo(prev => prev ? { ...prev, wo_status: 'deposit_secured', payment_intent_id: pi.id } : prev);
-      setPI(pi as PaymentIntent);
+      const { data: pi } = await supabase
+        .from('payment_intents')
+        .select('id,status,amount_cents,provider')
+        .eq('id', result.intentId)
+        .single();
+
+      setWo(prev => prev ? { ...prev, wo_status: 'deposit_secured', payment_intent_id: result.intentId } : prev);
+      if (pi) setPI(pi as PaymentIntent);
     } catch (e: any) {
       Alert.alert('Payment Error', e.message ?? 'Could not secure payment. Please try again.');
     }
@@ -1607,7 +1628,7 @@ export default function CustomerWorkOrderScreen() {
   function renderSection({ item: key }: { item: SectionKey }) {
     switch (key) {
       case 'hero':
-        return <HeroSection wo={wo!} eta={etaSec} onLearnMore={() => setShowLearnMore(true)} heldCents={heldCents} hasHold={hasHold} onSecurePayment={securePayment} securingPayment={securingPayment} />;
+        return <HeroSection wo={wo!} eta={etaSec} onLearnMore={() => setShowLearnMore(true)} heldCents={heldCents} hasHold={hasHold} isMockPayment={paymentIntent?.provider === 'mock'} onSecurePayment={securePayment} securingPayment={securingPayment} />;
       case 'contractor':
         return <ContractorCard contractor={contractor} woId={wo!.id} collapsed={collapsed.has('contractor')} onToggle={() => toggleSection('contractor')} />;
       case 'bill':
@@ -1806,6 +1827,8 @@ const s = StyleSheet.create({
   cardBody:    { paddingHorizontal: 16, paddingBottom: 16 },
 
   // Hero
+  mockBanner:     { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: O.cardAlt, borderRadius: 100, borderWidth: 1, borderColor: O.border, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 10 },
+  mockBannerText: { fontSize: 11, fontWeight: '600', color: O.txt2 },
   heroPill:       { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 100, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 5 },
   heroDot:        { width: 7, height: 7, borderRadius: 4 },
   heroPillTxt:    { fontSize: 12, fontWeight: '700' },

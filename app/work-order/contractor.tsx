@@ -117,7 +117,7 @@ interface WoMedia {
 }
 
 interface PaymentIntent {
-  id: string; status: string; amount_cents: number; captured_at: string | null;
+  id: string; status: string; amount_cents: number; captured_at: string | null; provider?: string | null;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -942,6 +942,12 @@ function PaymentSection({ pi, basePrice, collapsed, onToggle }: { pi: PaymentInt
 
   return (
     <SectionCard title="Payment" icon="💳" collapsed={collapsed} onToggle={onToggle}>
+      {hasHold && pi?.provider === 'mock' && (
+        <View style={s.mockBanner}>
+          <Ionicons name="flask-outline" size={13} color={G.txt2} />
+          <Text style={s.mockBannerText}>Dev mode · payment is simulated</Text>
+        </View>
+      )}
       {hasHold ? (
         <View style={[s.payCard, { borderColor: G.greenGlow }]}>
           <Text style={s.payLabel}>CUSTOMER'S CARD HOLD</Text>
@@ -1262,7 +1268,7 @@ export default function ContractorWorkOrderScreen() {
       supabase.from('users').select('id,full_name,avatar_url,phone').eq('id', woData.customer_id).maybeSingle(),
       supabase.from('payment_line_items').select('*').eq('work_order_id', woData.id).order('created_at'),
       woData.payment_intent_id
-        ? supabase.from('payment_intents').select('id,status,amount_cents,captured_at').eq('id', woData.payment_intent_id).maybeSingle()
+        ? supabase.from('payment_intents').select('id,status,amount_cents,captured_at,provider').eq('id', woData.payment_intent_id).maybeSingle()
         : { data: null },
       supabase.from('work_progress_items').select('*').eq('work_order_id', woData.id).order('sort_order'),
       supabase.from('work_order_events').select('*').eq('work_order_id', woData.id).order('created_at', { ascending: false }),
@@ -1321,7 +1327,7 @@ export default function ContractorWorkOrderScreen() {
           const updated = p.new as any;
           setWo(prev => prev ? { ...prev, ...updated } : prev);
           if (updated.wo_status === 'completed') {
-            supabase.from('payment_intents').select('id,status,amount_cents,captured_at').eq('id', updated.payment_intent_id ?? '').maybeSingle()
+            supabase.from('payment_intents').select('id,status,amount_cents,captured_at,provider').eq('id', updated.payment_intent_id ?? '').maybeSingle()
               .then(({ data }) => {
                 setPI(data ?? null);
                 setPaydayCents(data?.amount_cents ?? 0);
@@ -2161,6 +2167,8 @@ const s = StyleSheet.create({
   timelineTime: { fontSize: 11, color: G.txt3, marginTop: 2 },
 
   // Payment
+  mockBanner:     { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: G.cardAlt, borderRadius: 100, borderWidth: 1, borderColor: G.border, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 10 },
+  mockBannerText: { fontSize: 11, fontWeight: '600', color: G.txt2 },
   payCard:      { borderRadius: 12, borderWidth: 1, padding: 16, gap: 6 },
   payLabel:     { fontSize: 10, fontWeight: '800', color: G.txt3, letterSpacing: 0.8 },
   payAmt:       { fontSize: 28, fontWeight: '900' },
