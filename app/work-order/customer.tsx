@@ -267,8 +267,8 @@ const lm = StyleSheet.create({
 
 // ─── HeroSection ─────────────────────────────────────────────────────────────
 
-function HeroSection({ wo, eta, onLearnMore, heldCents, onSecurePayment, securingPayment }: {
-  wo: WoData; eta: number | null; onLearnMore: () => void; heldCents: number;
+function HeroSection({ wo, eta, onLearnMore, heldCents, hasHold, onSecurePayment, securingPayment }: {
+  wo: WoData; eta: number | null; onLearnMore: () => void; heldCents: number; hasHold: boolean;
   onSecurePayment?: () => void; securingPayment?: boolean;
 }) {
   const color      = STATUS_COLOR[wo.wo_status] ?? O.txt2;
@@ -319,7 +319,7 @@ function HeroSection({ wo, eta, onLearnMore, heldCents, onSecurePayment, securin
                 </>
             }
           </TouchableOpacity>
-        ) : (
+        ) : hasHold ? (
           /* Payment Protected box */
           <View style={s.protectedBox}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -339,6 +339,25 @@ function HeroSection({ wo, eta, onLearnMore, heldCents, onSecurePayment, securin
                   ? 'Released to contractor'
                   : 'Held securely — releases only when you approve'}
             </Text>
+          </View>
+        ) : (
+          /* No real payment_intent exists, and this status isn't the
+             'accepted, needs hold' case above (either wo_status moved
+             forward without one -- shouldn't happen, but Start Job
+             blocking on this exact condition proves it can -- or the
+             hold never got created). Showing a fabricated dollar amount
+             here was worse than showing nothing: a customer believing
+             their card is secured when it isn't. */
+          <View style={[s.protectedBox, { borderColor: 'rgba(239,68,68,0.25)' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Ionicons name="alert-circle-outline" size={24} color={O.red} />
+              <View style={{ flex: 1 }}>
+                <Text style={[s.protectedLabel, { color: O.red }]}>NO PAYMENT ON FILE</Text>
+                <Text style={[s.protectedSub, { marginTop: 2 }]}>
+                  This job has no active payment hold. Contact support if this doesn't look right.
+                </Text>
+              </View>
+            </View>
           </View>
         )}
 
@@ -1375,7 +1394,13 @@ export default function CustomerWorkOrderScreen() {
   }
 
   const basePrice      = wo.booking?.price_estimate ?? 0;
-  const heldCents      = paymentIntent?.amount_cents ?? (basePrice * 100);
+  // Was falling back to the estimated price whenever there was no real
+  // paymentIntent, so a work order with no payment on file still showed
+  // "Payment Protected: $X" -- a fabricated hold amount, not the real
+  // state. heldCents is now only ever a real captured/held amount;
+  // HeroSection is told explicitly whether a hold actually exists.
+  const heldCents      = paymentIntent?.amount_cents ?? 0;
+  const hasHold        = !!paymentIntent;
   const pendingCOCount = lineItems.filter(i => i.approval_status === 'pending').length;
   const isEnRoute      = wo.wo_status === 'en_route';
   const isArrived      = wo.wo_status === 'arrived';
@@ -1582,7 +1607,7 @@ export default function CustomerWorkOrderScreen() {
   function renderSection({ item: key }: { item: SectionKey }) {
     switch (key) {
       case 'hero':
-        return <HeroSection wo={wo!} eta={etaSec} onLearnMore={() => setShowLearnMore(true)} heldCents={heldCents} onSecurePayment={securePayment} securingPayment={securingPayment} />;
+        return <HeroSection wo={wo!} eta={etaSec} onLearnMore={() => setShowLearnMore(true)} heldCents={heldCents} hasHold={hasHold} onSecurePayment={securePayment} securingPayment={securingPayment} />;
       case 'contractor':
         return <ContractorCard contractor={contractor} woId={wo!.id} collapsed={collapsed.has('contractor')} onToggle={() => toggleSection('contractor')} />;
       case 'bill':

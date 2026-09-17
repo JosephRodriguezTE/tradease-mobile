@@ -911,8 +911,9 @@ function TimelineSection({ events, collapsed, onToggle }: { events: WoEvent[]; c
 // ─── PaymentSection ───────────────────────────────────────────────────────────
 
 function PaymentSection({ pi, basePrice, collapsed, onToggle }: { pi: PaymentIntent | null; basePrice: number; collapsed: boolean; onToggle: () => void }) {
-  const held = pi?.amount_cents ?? basePrice * 100;
-  const piStatus = pi?.status ?? 'pending_hold';
+  const hasHold = !!pi;
+  const held = pi?.amount_cents ?? 0;
+  const piStatus = pi?.status ?? null;
 
   const statusColor: Record<string, string> = {
     held: G.green, in_progress: G.blue, contractor_completed: G.amber,
@@ -921,18 +922,33 @@ function PaymentSection({ pi, basePrice, collapsed, onToggle }: { pi: PaymentInt
 
   return (
     <SectionCard title="Payment" icon="💳" collapsed={collapsed} onToggle={onToggle}>
-      <View style={[s.payCard, { borderColor: G.greenGlow }]}>
-        <Text style={s.payLabel}>CUSTOMER'S CARD HOLD</Text>
-        <Text style={[s.payAmt, { color: G.orange }]}>{fmt$(held)}</Text>
-        <Text style={s.payNote}>
-          This amount is protected on the customer's card. Funds release to you once the customer approves the completed work.
-        </Text>
-        <View style={[s.statusPill, { alignSelf: 'flex-start', marginTop: 8, backgroundColor: `${statusColor[piStatus] ?? G.txt3}20` }]}>
-          <Text style={[s.statusPillTxt, { color: statusColor[piStatus] ?? G.txt3 }]}>
-            {piStatus.replace(/_/g, ' ')}
+      {hasHold ? (
+        <View style={[s.payCard, { borderColor: G.greenGlow }]}>
+          <Text style={s.payLabel}>CUSTOMER'S CARD HOLD</Text>
+          <Text style={[s.payAmt, { color: G.orange }]}>{fmt$(held)}</Text>
+          <Text style={s.payNote}>
+            This amount is protected on the customer's card. Funds release to you once the customer approves the completed work.
+          </Text>
+          <View style={[s.statusPill, { alignSelf: 'flex-start', marginTop: 8, backgroundColor: `${statusColor[piStatus!] ?? G.txt3}20` }]}>
+            <Text style={[s.statusPillTxt, { color: statusColor[piStatus!] ?? G.txt3 }]}>
+              {piStatus!.replace(/_/g, ' ')}
+            </Text>
+          </View>
+        </View>
+      ) : (
+        // No real payment_intent row -- was previously falling back to
+        // basePrice*100 labeled "CUSTOMER'S CARD HOLD" with a green
+        // border and a fabricated "pending hold" status, which is
+        // exactly backwards: this state means Start Job will be
+        // rejected server-side (work-order-transition requires a real
+        // held payment_intent), not that one is pending.
+        <View style={[s.payCard, { borderColor: 'rgba(239,68,68,0.3)' }]}>
+          <Text style={[s.payLabel, { color: G.red }]}>NO PAYMENT HOLD ON FILE</Text>
+          <Text style={s.payNote}>
+            This job has no active payment hold. Start Job will be rejected until the customer secures payment.
           </Text>
         </View>
-      </View>
+      )}
     </SectionCard>
   );
 }
