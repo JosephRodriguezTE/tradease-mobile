@@ -1,0 +1,25 @@
+-- Third of the three cancellations bugs reported this session (see
+-- 20260916010000 for the first two). handle_booking_cancellation() and
+-- handle_cancellation_and_reassign() both fire on the booking transitioning
+-- to 'declined', producing two rows in cancellations for one decline once
+-- the 20260916010000 fix stops the insert exception from rolling the
+-- whole UPDATE back.
+--
+-- handle_booking_cancellation() (per its live definition, not present in
+-- either repo's migration history): fires on 'declined' only. Inserts
+-- booking_id, cancelled_by, hours_before, fee_percent, rule_applied,
+-- refund_status into cancellations; updates bookings.cancelled_at and
+-- refund_status. Never touches notifications.
+--
+-- handle_cancellation_and_reassign() already does all of that -- same
+-- columns, same path -- plus the customer/contractor notification and
+-- the reassignment framing, and already owns 'cancelled' too. Nothing in
+-- handle_booking_cancellation() isn't already covered. Dropping it loses
+-- no behavior; handle_cancellation_and_reassign() needs no changes to
+-- pick up sole ownership of 'declined' -- it already fires there.
+--
+-- RETURNS trigger functions can only ever be invoked as a trigger handler
+-- (Postgres won't allow calling one as a normal function), so this can't
+-- be referenced from anywhere else -- CASCADE removes the dependent
+-- trigger on bookings without needing to know its exact name.
+DROP FUNCTION IF EXISTS public.handle_booking_cancellation() CASCADE;
