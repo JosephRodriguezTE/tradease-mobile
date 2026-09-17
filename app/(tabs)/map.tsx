@@ -920,11 +920,19 @@ export default function MapScreen() {
         </Pressable>
       </Modal>
 
-      {/* ── Draggable results sheet ── */}
+      {/* ── Draggable results sheet ──
+          enableDynamicSizing defaults to true as of @gorhom/bottom-sheet
+          v5 -- without explicitly disabling it, the sheet measures and
+          sizes itself to content on the initial layout pass instead of
+          honoring these percentage snapPoints, which is what let the
+          peek row render tall enough on mount to overlap the floating
+          radius pill. Disabling it restores the v4 behavior this code
+          was written against: snapPoints are law, index=0 means 12%. */}
       <BottomSheet
         ref={bottomSheetRef}
         index={0}
         snapPoints={snapPoints}
+        enableDynamicSizing={false}
         onChange={setSheetIndex}
         backgroundStyle={s.sheetBackground}
         handleIndicatorStyle={s.sheetHandle}
