@@ -450,16 +450,28 @@ export default function SubscriptionScreen() {
   async function applyPlanChange(plan: string): Promise<boolean> {
     setUpgrading(true);
     try {
-      const { data:{ user } } = await supabase.auth.getUser();
-      if (!user) return false;
+      const { data:{ user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        Alert.alert('Update Failed', "Couldn't verify your session. Please sign in again and retry.");
+        return false;
+      }
 
-      const { error } = await supabase.from('contractors').update({ plan }).eq('id', user.id);
-      if (error) {
+      const { data, error } = await supabase
+        .from('contractors')
+        .update({ plan })
+        .eq('id', user.id)
+        .select('plan')
+        .single();
+
+      // A DB-level guard silently reverts `plan` on some writes without
+      // raising an error, so a matched row with the wrong plan back is
+      // still a failure — only trust what the server says it stored.
+      if (error || !data || data.plan !== plan) {
         Alert.alert('Update Failed', "Couldn't update your plan. Please try again.");
         return false;
       }
 
-      setCurrentPlan(plan);
+      setCurrentPlan(data.plan);
       return true;
     } finally {
       setUpgrading(false);
@@ -475,7 +487,12 @@ export default function SubscriptionScreen() {
         'You will lose access to paid features immediately.',
         [
           { text:'Cancel', style:'cancel' },
-          { text:'Downgrade', style:'destructive', onPress: () => applyPlanChange('free') },
+          { text:'Downgrade', style:'destructive', onPress: async () => {
+              const ok = await applyPlanChange('free');
+              if (ok) {
+                Alert.alert('Plan Updated', 'You are now on the Free plan.');
+              }
+            } },
         ],
       );
       return;
