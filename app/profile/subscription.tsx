@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
+import { HammerLoader } from '@/components/HammerLoader';
 
 const FW = { regular:'400' as const, medium:'500' as const, semibold:'600' as const, bold:'700' as const, black:'800' as const };
 const SP = { 1:4,2:8,3:12,4:16,5:20,6:24,8:32,10:40 } as const;
@@ -497,7 +498,7 @@ export default function SubscriptionScreen() {
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor:C.background }]} edges={['top']}>
-        <View style={styles.center}><ActivityIndicator color={C.orange} size="large" /></View>
+        <View style={styles.center}><HammerLoader size={64} /></View>
       </SafeAreaView>
     );
   }
@@ -568,7 +569,7 @@ export default function SubscriptionScreen() {
 
       {upgrading && (
         <View style={[styles.loadingOverlay, { backgroundColor:'rgba(0,0,0,0.65)' }]}>
-          <ActivityIndicator color="#FF6200" size="large" />
+          <HammerLoader size={48} />
         </View>
       )}
 

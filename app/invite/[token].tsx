@@ -2,6 +2,7 @@
 // Deep-link invite acceptance screen
 // Opened via tradease://invite/<token>
 
+import { HammerLoader } from '@/components/HammerLoader';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -143,7 +144,7 @@ export default function InviteScreen() {
     return (
       <SafeAreaView style={s.container} edges={['top']}>
         <View style={s.center}>
-          <ActivityIndicator color={C.orange} size="large" />
+          <HammerLoader size={64} />
           <Text style={[s.loadingText, { color: C.textMuted }]}>Loading invite…</Text>
         </View>
       </SafeAreaView>

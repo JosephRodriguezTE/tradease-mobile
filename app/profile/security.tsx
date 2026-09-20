@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
+import { HammerLoader } from '@/components/HammerLoader';
 import {
   ActivityIndicator, Alert, ScrollView, StyleSheet, Text,
   TouchableOpacity, View,
@@ -78,7 +79,9 @@ export default function SecurityScreen() {
           </View>
 
           {loading ? (
-            <ActivityIndicator color="#FF6200" style={{ paddingVertical: SP[5] }} />
+            <View style={{ paddingVertical: SP[5], alignItems: 'center' }}>
+              <HammerLoader size={48} />
+            </View>
           ) : (
             <>
               {/* Status badge */}

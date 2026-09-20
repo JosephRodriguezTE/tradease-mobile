@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Skeleton, SkeletonBillSection, SkeletonChecklist, SkeletonContractorCard, SkeletonHero } from '@/components/Skeleton';
+import { HammerLoader } from '@/components/HammerLoader';
 import { WorkOrderSheet } from '@/components/WorkOrderSheet';
 import { useAuth } from '@/hooks/useAuth';
 import { DEFAULT_MAP_REGION, MAPBOX_ACCESS_TOKEN } from '@/lib/mapConfig';
@@ -938,7 +939,7 @@ function CompletionSheet({
 
         {phase === 'processing' && (
           <View style={cs.centeredWrap}>
-            <ActivityIndicator color={O.orange} size="large" />
+            <HammerLoader size={64} />
             <Text style={cs.processingTxt}>Processing payment…</Text>
           </View>
         )}

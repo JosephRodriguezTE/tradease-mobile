@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
+import { HammerLoader } from '@/components/HammerLoader';
 import { Font, Radius } from '../../constants/theme';
 
 const SP = { 1:4, 2:8, 3:12, 4:16, 5:20, 6:24, 8:32, 10:40 } as const;
@@ -56,7 +57,7 @@ export default function AdminHomeScreen() {
   if (adminLoading || !isAdmin) {
     return (
       <SafeAreaView style={[s.container, { backgroundColor: C.background }]} edges={['top']}>
-        <View style={s.center}><ActivityIndicator color={C.orange} size="large" /></View>
+        <View style={s.center}><HammerLoader size={64} /></View>
       </SafeAreaView>
     );
   }

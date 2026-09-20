@@ -14,6 +14,7 @@ import {
     View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { HammerLoader } from '@/components/HammerLoader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Spacing } from '../../constants/Layout';
 import { Colors, Font, Radius } from '../../constants/theme';
@@ -224,7 +225,7 @@ function ContractorEditForm() {
   if (loading) {
     return (
       <View style={styles.loadingWrap}>
-        <ActivityIndicator color={Colors.orange} size="large" />
+        <HammerLoader size={64} />
       </View>
     );
   }
@@ -458,7 +459,7 @@ function CustomerEditForm() {
   if (loading) {
     return (
       <View style={styles.loadingWrap}>
-        <ActivityIndicator color={Colors.orange} size="large" />
+        <HammerLoader size={64} />
       </View>
     );
   }

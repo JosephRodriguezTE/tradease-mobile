@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { TradeaseLogo } from '../components/TradeaseLogo';
+import { HammerLoader } from '@/components/HammerLoader';
 import {
   ActivityIndicator,
   Alert, Animated,
@@ -419,7 +420,7 @@ export default function SignupScreen() {
   if (!bootChecked) {
     return (
       <View style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}>
-        <ActivityIndicator color={Colors.orange} size="large" />
+        <HammerLoader size={64} />
       </View>
     );
   }

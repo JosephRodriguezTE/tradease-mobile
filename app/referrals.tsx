@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
+import { HammerLoader } from '@/components/HammerLoader';
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Share,
@@ -73,7 +73,7 @@ export default function ReferralsScreen() {
   if (loading) {
     return (
       <View style={s.center}>
-        <ActivityIndicator color={Colors.orange} />
+        <HammerLoader size={64} />
       </View>
     );
   }

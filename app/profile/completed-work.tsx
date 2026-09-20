@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useTheme, AppColors } from '@/context/ThemeContext';
+import { HammerLoader } from '@/components/HammerLoader';
 import { Colors, Font, Radius } from '../../constants/theme';
 
 const SP = { 1:4,2:8,3:12,4:16,5:20,6:24,8:32,10:40 } as const;
@@ -233,7 +234,7 @@ export default function CompletedWorkScreen() {
 
       {loading ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={C.orange} size="large" />
+          <HammerLoader size={64} />
         </View>
       ) : jobs.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SP[8] }}>

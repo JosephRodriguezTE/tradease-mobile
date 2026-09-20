@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
 import { useTheme, AppColors } from '@/context/ThemeContext';
+import { HammerLoader } from '@/components/HammerLoader';
 import { Font, Radius } from '../../constants/theme';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -338,7 +339,7 @@ export default function PortfolioScreen() {
     return (
       <SafeAreaView style={[st.container, { backgroundColor: C.background }]} edges={['top']}>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={C.orange} size="large" />
+          <HammerLoader size={64} />
         </View>
       </SafeAreaView>
     );
@@ -404,7 +405,7 @@ export default function PortfolioScreen() {
       {uploading && (
         <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', zIndex: 99 }}>
           <View style={{ backgroundColor: C.surface, borderRadius: Radius.lg, padding: SP[6], alignItems: 'center', gap: SP[3], borderWidth: 0.5, borderColor: C.border }}>
-            <ActivityIndicator color={C.orange} size="large" />
+            <HammerLoader size={48} />
             <Text style={{ fontSize: TY.sm, color: C.textSecondary, fontWeight: Font.semibold }}>Uploading photo…</Text>
           </View>
         </View>

@@ -14,6 +14,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { decode as decodeBase64 } from 'base64-arraybuffer';
 import { supabase } from '@/lib/supabase';
 import { useTheme, AppColors } from '@/context/ThemeContext';
+import { HammerLoader } from '@/components/HammerLoader';
 import { Font, Radius } from '../../constants/theme';
 import { OnboardingColors as OC, OnboardingSpacing as OS2 } from '@/lib/design/onboarding-tokens';
 
@@ -490,7 +491,7 @@ export default function GetVerifiedScreen() {
     return (
       <SafeAreaView style={[st.container, { backgroundColor: C.background }]} edges={['top']}>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={C.orange} size="large" />
+          <HammerLoader size={64} />
         </View>
       </SafeAreaView>
     );

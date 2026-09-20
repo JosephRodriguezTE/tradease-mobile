@@ -1,10 +1,10 @@
+import { HammerLoader } from '@/components/HammerLoader';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Image,
   RefreshControl,
@@ -416,7 +416,7 @@ export default function FindContractorScreen() {
 
       {loading ? (
         <View style={styles.loadingState}>
-          <ActivityIndicator color={Colors.orange} size="large" />
+          <HammerLoader size={64} />
           <Text style={styles.loadingText}>Finding contractors...</Text>
         </View>
       ) : (

@@ -9,6 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { HammerLoader } from '@/components/HammerLoader';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
@@ -405,7 +406,7 @@ export default function ContractorCalendarScreen() {
   if (planLoading) {
     return (
       <SafeAreaView style={[s.root, { backgroundColor: C.background }]} edges={['top']}>
-        <View style={s.center}><ActivityIndicator color={C.orange} size="large" /></View>
+        <View style={s.center}><HammerLoader size={64} /></View>
       </SafeAreaView>
     );
   }

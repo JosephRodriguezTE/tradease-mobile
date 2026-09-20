@@ -2,10 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, RefreshControl, ScrollView,
+  RefreshControl, ScrollView,
   StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { HammerLoader } from '@/components/HammerLoader';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -165,7 +166,7 @@ export default function AnalyticsScreen() {
     return (
       <SafeAreaView style={[s.container, { backgroundColor: C.background }]} edges={['top']}>
         <Header />
-        <View style={s.center}><ActivityIndicator color={C.orange} size="large" /></View>
+        <View style={s.center}><HammerLoader size={64} /></View>
       </SafeAreaView>
     );
   }

@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import NoAccountOverlay from '@/components/NoAccountOverlay';
 import VerificationGate from '@/components/VerificationGate';
+import { HammerLoader } from '@/components/HammerLoader';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -1239,7 +1240,7 @@ export default function ProfileScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.loadingState}>
-          <ActivityIndicator color={Colors.orange} size="large" />
+          <HammerLoader size={64} />
         </View>
       </SafeAreaView>
     );

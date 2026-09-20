@@ -1,3 +1,4 @@
+import { HammerLoader } from '@/components/HammerLoader';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
@@ -223,7 +224,7 @@ export default function EmployeesScreen() {
   if (loading) {
     return (
       <SafeAreaView style={s.container} edges={['top']}>
-        <View style={s.center}><ActivityIndicator color={C.orange} size="large" /></View>
+        <View style={s.center}><HammerLoader size={64} /></View>
       </SafeAreaView>
     );
   }

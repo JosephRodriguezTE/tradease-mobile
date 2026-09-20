@@ -1,6 +1,7 @@
 // app/company/[id].tsx
 // Public contractor profile — what customers see when browsing.
 
+import { HammerLoader } from '@/components/HammerLoader';
 import { useTheme } from '@/context/ThemeContext';
 import { deriveChatId } from '@/lib/messageService';
 import { supabase } from '@/lib/supabase';
@@ -8,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator, Alert, Animated, Dimensions, FlatList,
+    Alert, Animated, Dimensions, FlatList,
     Image, Linking, Modal, ScrollView, Share,
     StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
@@ -118,7 +119,7 @@ export default function ContractorPublicProfile() {
   if (loading) {
     return (
       <SafeAreaView style={[s.container, { backgroundColor:C.background }]} edges={['top']}>
-        <View style={s.center}><ActivityIndicator color={C.orange} size="large" /></View>
+        <View style={s.center}><HammerLoader size={64} /></View>
       </SafeAreaView>
     );
   }

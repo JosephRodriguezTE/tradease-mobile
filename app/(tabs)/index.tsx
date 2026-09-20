@@ -15,6 +15,7 @@ import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 import { supabase } from '../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { TradeaseLogo } from '../../components/TradeaseLogo';
+import { HammerLoader } from '@/components/HammerLoader';
 
 // ─── Notification bell (shared) ───────────────────────────────────────────────
 
@@ -394,7 +395,7 @@ function ContractorHome() {
   if (loading) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.background }}>
-        <ActivityIndicator color={C.orange} size="large" />
+        <HammerLoader size={64} />
       </View>
     );
   }
@@ -746,7 +747,7 @@ export default function HomeScreen() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: C.background }} edges={['top']}>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={C.orange} size="large" />
+          <HammerLoader size={64} />
         </View>
       </SafeAreaView>
     );

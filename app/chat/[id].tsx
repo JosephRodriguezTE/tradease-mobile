@@ -1,3 +1,4 @@
+import { HammerLoader } from '@/components/HammerLoader';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -233,7 +234,7 @@ export default function ChatScreen() {
   if (loading) {
     return (
       <SafeAreaView style={s.container} edges={['top']}>
-        <View style={s.center}><ActivityIndicator color={C.orange} size="large" /></View>
+        <View style={s.center}><HammerLoader size={64} /></View>
       </SafeAreaView>
     );
   }

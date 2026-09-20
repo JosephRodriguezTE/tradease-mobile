@@ -1,12 +1,13 @@
 // app/profile/verification-status.tsx
 // Shows current verification status — pending, approved, or rejected with reason
 
+import { HammerLoader } from '@/components/HammerLoader';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Font } from '../../constants/theme';
 import { OnboardingColors as OC, OnboardingSpacing as OS2, FontSize as FS } from '@/lib/design/onboarding-tokens';
@@ -116,7 +117,7 @@ export default function VerificationStatusScreen() {
     return (
       <SafeAreaView style={[s.container, { backgroundColor:C.background }]} edges={['top']}>
         <View style={{ flex:1, alignItems:'center', justifyContent:'center' }}>
-          <ActivityIndicator color={C.orange} size="large" />
+          <HammerLoader size={64} />
         </View>
       </SafeAreaView>
     );

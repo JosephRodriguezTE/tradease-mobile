@@ -2,6 +2,7 @@
 // Contractor edits their public company profile.
 // Photo limits: Free = 5, Leads = 10, Pro = 15.
 
+import { HammerLoader } from '@/components/HammerLoader';
 import { useTheme } from '@/context/ThemeContext';
 import { POPULAR_SEARCHES, TRADE_SPECIALTIES } from '@/lib/tradeJobs';
 import { supabase } from '@/lib/supabase';
@@ -305,7 +306,7 @@ export default function CompanyProfileScreen() {
   if (loading) {
     return (
       <SafeAreaView style={[s.container, { backgroundColor:C.background }]} edges={['top']}>
-        <View style={s.center}><ActivityIndicator color={C.orange} size="large" /></View>
+        <View style={s.center}><HammerLoader size={64} /></View>
       </SafeAreaView>
     );
   }

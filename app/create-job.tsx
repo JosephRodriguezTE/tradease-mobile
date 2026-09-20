@@ -4,6 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
+import { HammerLoader } from '@/components/HammerLoader';
 import {
   ActivityIndicator,
   Alert,
@@ -736,7 +737,7 @@ export default function CreateJobScreen() {
               {selectedJob && (loadingContractors ? (
                 <View>
                   <Text style={styles.sectionLabel}>CONTRACTORS WHO SPECIALIZE IN THIS</Text>
-                  <ActivityIndicator color={Colors.orange} style={{ marginTop: 8 }} />
+                  <HammerLoader size={48} />
                 </View>
               ) : matchedContractors.length > 0 ? (
                 <View>

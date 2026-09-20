@@ -4,6 +4,7 @@
 // Employee-aware: employees see employer's job feed and company stats
 
 import { useTheme } from '@/context/ThemeContext';
+import { HammerLoader } from '@/components/HammerLoader';
 import VerificationGate from '@/components/VerificationGate';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole, EmployeeRecord } from '@/hooks/useRole';
@@ -1057,7 +1058,7 @@ export default function ContractorHomeScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.center}>
-          <ActivityIndicator color={C.orange} size="large" />
+          <HammerLoader size={64} />
         </View>
       </SafeAreaView>
     );

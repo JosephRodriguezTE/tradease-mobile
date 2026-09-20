@@ -10,6 +10,7 @@
 // screen on real hardware before. If you add a hook, add it to the block
 // at the top, not next to the code that uses it.
 
+import { HammerLoader } from '@/components/HammerLoader';
 import { useTheme, AppColors } from '@/context/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
@@ -752,7 +753,7 @@ export default function MapScreen() {
     return (
       <SafeAreaView style={s.container} edges={['top']}>
         <View style={s.center}>
-          <ActivityIndicator color={C.orange} size="large" />
+          <HammerLoader size={64} />
           <Text style={[s.emptySub, { marginTop: 8 }]}>Getting your location…</Text>
         </View>
       </SafeAreaView>

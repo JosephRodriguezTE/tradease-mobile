@@ -1,4 +1,5 @@
 import NoAccountOverlay from '@/components/NoAccountOverlay';
+import { HammerLoader } from '@/components/HammerLoader';
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -233,7 +234,7 @@ function ComposeModal({ visible, onClose, userId, C }: {
           {/* List */}
           {loading ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 40 }}>
-              <ActivityIndicator color={C.orange} />
+              <HammerLoader size={48} />
             </View>
           ) : filtered.length === 0 ? (
             <View style={{ alignItems: 'center', paddingVertical: 40, paddingHorizontal: 32 }}>
@@ -337,7 +338,7 @@ export default function MessagesScreen() {
   if (authLoading) {
     return (
       <SafeAreaView style={s.container} edges={['top']}>
-        <View style={s.center}><ActivityIndicator color={C.orange} size="large" /></View>
+        <View style={s.center}><HammerLoader size={64} /></View>
       </SafeAreaView>
     );
   }
@@ -381,7 +382,7 @@ export default function MessagesScreen() {
       </View>
 
       {loading ? (
-        <View style={s.center}><ActivityIndicator color={C.orange} size="large" /></View>
+        <View style={s.center}><HammerLoader size={64} /></View>
       ) : filtered.length === 0 ? (
         <View style={s.empty}>
           <Ionicons name="chatbubbles-outline" size={56} color={C.textMuted} />

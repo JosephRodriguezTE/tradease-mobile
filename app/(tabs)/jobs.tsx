@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import NoAccountOverlay from '@/components/NoAccountOverlay';
+import { HammerLoader } from '@/components/HammerLoader';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
@@ -286,7 +287,7 @@ function CustomerBookings() {
   if (authLoading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: C.background }]} edges={['top']}>
-        <View style={styles.center}><ActivityIndicator color={C.orange} size="large" /></View>
+        <View style={styles.center}><HammerLoader size={64} /></View>
       </SafeAreaView>
     );
   }
@@ -345,7 +346,7 @@ function CustomerBookings() {
       )}
 
       {loading
-        ? <View style={styles.center}><ActivityIndicator color={C.orange} size="large" /></View>
+        ? <View style={styles.center}><HammerLoader size={64} /></View>
         : <FlatList
         data={filtered}
         keyExtractor={b => b.id}
@@ -416,7 +417,7 @@ export default function JobsTab() {
   if (loading) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.background }}>
-        <ActivityIndicator color={C.orange} size="large" />
+        <HammerLoader size={64} />
       </View>
     );
   }

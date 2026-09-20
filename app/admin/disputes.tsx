@@ -10,6 +10,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
+import { HammerLoader } from '@/components/HammerLoader';
 import { Font, Radius } from '../../constants/theme';
 
 const SP = { 1:4, 2:8, 3:12, 4:16, 5:20, 6:24, 8:32, 10:40 } as const;
@@ -95,7 +96,7 @@ export default function AdminDisputesScreen() {
       </View>
 
       {loading ? (
-        <View style={s.center}><ActivityIndicator color={C.orange} size="large" /></View>
+        <View style={s.center}><HammerLoader size={64} /></View>
       ) : rows.length === 0 ? (
         <View style={s.center}>
           <Ionicons name="checkmark-done-circle-outline" size={44} color={C.textMuted} />

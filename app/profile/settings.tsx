@@ -2,6 +2,7 @@
 // Replaces the previous settings.tsx. Now uses useTheme() and has a working
 // Appearance toggle with Dark / Light / System options.
 
+import { HammerLoader } from '@/components/HammerLoader';
 import { useTheme } from '@/context/ThemeContext';
 import { useRole } from '@/hooks/useRole';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
@@ -275,7 +276,7 @@ export default function SettingsScreen() {
 
       {signingOut && (
         <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor:'rgba(0,0,0,0.7)', alignItems:'center', justifyContent:'center', gap:SP[3] }}>
-          <ActivityIndicator color={C.orange} size="large" />
+          <HammerLoader size={48} />
           <Text style={{ fontSize:TY.base, color:'#fff', fontWeight:Font.bold }}>Signing out...</Text>
         </View>
       )}

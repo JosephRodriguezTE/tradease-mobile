@@ -23,6 +23,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { HammerLoader } from '@/components/HammerLoader';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 
@@ -324,7 +325,7 @@ export default function WorkOrderChatScreen() {
       >
         {loading ? (
           <View style={styles.center}>
-            <ActivityIndicator color={C.orange} />
+            <HammerLoader size={64} />
           </View>
         ) : (
           <FlatList

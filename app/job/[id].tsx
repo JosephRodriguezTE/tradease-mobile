@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { HammerLoader } from '@/components/HammerLoader';
 import { useTheme } from '@/context/ThemeContext';
 import VerificationGate from '@/components/VerificationGate';
 import { useAuth } from '@/hooks/useAuth';
@@ -628,7 +629,7 @@ export default function JobDetailScreen() {
   if (loading) {
     return (
       <SafeAreaView style={s.container} edges={['top']}>
-        <View style={s.center}><ActivityIndicator color={C.orange} size="large" /></View>
+        <View style={s.center}><HammerLoader size={64} /></View>
       </SafeAreaView>
     );
   }

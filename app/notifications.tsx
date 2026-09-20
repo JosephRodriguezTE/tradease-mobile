@@ -1,3 +1,4 @@
+import { HammerLoader } from '@/components/HammerLoader';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -246,7 +247,7 @@ export default function NotificationsScreen() {
 
       {loading ? (
         <View style={s.center}>
-          <ActivityIndicator color={C.orange} size="large" />
+          <HammerLoader size={64} />
         </View>
       ) : (
         <SectionList

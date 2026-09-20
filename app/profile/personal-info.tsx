@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { HammerLoader } from '@/components/HammerLoader';
 import { Spacing } from '../../constants/Layout';
 import { Colors, Font, Radius } from '../../constants/theme';
 import { useTheme } from '@/context/ThemeContext';
@@ -197,7 +198,7 @@ export default function PersonalInfoScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.loadingState}>
-          <ActivityIndicator color={Colors.orange} size="large" />
+          <HammerLoader size={64} />
         </View>
       </SafeAreaView>
     );
