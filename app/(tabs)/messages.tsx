@@ -19,7 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
 import { useRole } from '../../hooks/useRole';
 import { supabase } from '../../lib/supabase';
-import { type ChatSummary, getChatList } from '../../lib/messageService';
+import { deriveChatId, type ChatSummary, getChatList } from '../../lib/messageService';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -161,16 +161,17 @@ function ComposeModal({ visible, onClose, userId, C }: {
   async function openOrCreate(contractorId: string) {
     setOpening(contractorId);
     try {
-      const { data: existing } = await supabase
-        .from('conversations')
+      const chatId = deriveChatId(userId, contractorId);
+      const { data: existingMsg } = await supabase
+        .from('messages')
         .select('id')
-        .eq('customer_id', userId)
-        .eq('contractor_id', contractorId)
+        .eq('chat_id', chatId)
+        .limit(1)
         .maybeSingle();
 
-      if (existing) {
+      if (existingMsg) {
         onClose();
-        router.push(`/chat/${existing.id}` as any);
+        router.push(`/chat/${contractorId}` as any);
         return;
       }
 
@@ -187,20 +188,8 @@ function ComposeModal({ visible, onClose, userId, C }: {
       );
       if (!confirmed) { setOpening(null); return; }
 
-      const { data: newConv, error } = await supabase
-        .from('conversations')
-        .insert({
-          customer_id:     userId,
-          contractor_id:   contractorId,
-          contractor_name: contractor?.company_name ?? '',
-          status:          'pending',
-        })
-        .select('id')
-        .single();
-
-      if (error) throw error;
       onClose();
-      router.push(`/chat/${newConv.id}` as any);
+      router.push(`/chat/${contractorId}` as any);
     } catch (err: any) {
       Alert.alert('Error', err.message ?? 'Could not open conversation.');
     } finally {

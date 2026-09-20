@@ -89,31 +89,6 @@ export async function getAvailableJobs(trade?: string) {
   return data ?? [];
 }
 
-// ─── Contractor: Accept a job ─────────────────────────────────────────────────
-
-export async function acceptJob(bookingId: string) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
-
-  const { data, error } = await supabase
-    .from('bookings')
-    .update({
-      contractor_id: user.id,
-      status: 'accepted',
-      confirmed_at: new Date().toISOString(),
-    })
-    .eq('id', bookingId)
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  // Auto-create a conversation when job is accepted
-  await createConversation(bookingId, data.customer_id, user.id);
-
-  return data;
-}
-
 // ─── Contractor: Decline a job ────────────────────────────────────────────────
 
 export async function declineJob(bookingId: string) {
@@ -145,33 +120,3 @@ export async function completeJob(bookingId: string) {
   return data;
 }
 
-// ─── Create conversation (internal) ──────────────────────────────────────────
-
-async function createConversation(
-  bookingId: string,
-  customerId: string,
-  contractorId: string
-) {
-  // Check if conversation already exists
-  const { data: existing } = await supabase
-    .from('conversations')
-    .select('id')
-    .eq('customer_id', customerId)
-    .eq('contractor_id', contractorId)
-    .single();
-
-  if (existing) return existing;
-
-  const { data, error } = await supabase
-    .from('conversations')
-    .insert({
-      customer_id: customerId,
-      contractor_id: contractorId,
-      status: 'accepted',
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
-}

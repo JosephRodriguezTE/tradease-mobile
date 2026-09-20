@@ -99,18 +99,20 @@ export default function ChatScreen() {
   const [myName, setMyName] = useState('Me');
   const [myRole, setMyRole] = useState<'contractor' | 'customer'>('customer');
   const [otherId, setOtherId] = useState('');
+  const [chatId, setChatId] = useState('');
   const [booking, setBooking] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
 
-  // chat_id is the route param `id`; if someone passes a contractorId, re-derive the correct chatId
-  const chatId = id ?? '';
+  // The route param is either a real chat_id (two user UUIDs joined with `_`)
+  // or a bare other-user id — resolved to a chat_id in init() once we know our own id.
+  const rawParam = id ?? '';
 
   useEffect(() => {
-    if (!chatId) return;
+    if (!rawParam) return;
     init();
-  }, [chatId]);
+  }, [rawParam]);
 
   // Realtime
   useEffect(() => {
@@ -127,13 +129,15 @@ export default function ChatScreen() {
     if (!u) { setLoading(false); return; }
     setUser(u);
 
-    const parts = chatId.split('_');
-    const other = contractorId ?? (parts.length === 2 ? otherUserFromChatId(chatId, u.id) : '');
+    const isChatId = rawParam.includes('_');
+    const resolvedChatId = isChatId ? rawParam : deriveChatId(u.id, rawParam);
+    const other = isChatId ? (contractorId ?? otherUserFromChatId(resolvedChatId, u.id)) : rawParam;
+    setChatId(resolvedChatId);
     setOtherId(other);
 
     // Parallel: messages, other party info, current user info, booking
     const [msgs, otherCtr, otherUsr, myCtr, myUsr] = await Promise.all([
-      getChatMessages(chatId),
+      getChatMessages(resolvedChatId),
       supabase.from('contractors_public').select('id,company_name,avatar_url').eq('id', other).maybeSingle(),
       supabase.from('users').select('id,full_name,avatar_url').eq('id', other).maybeSingle(),
       supabase.from('contractors').select('company_name').eq('id', u.id).maybeSingle(),
@@ -159,7 +163,7 @@ export default function ChatScreen() {
       setBooking(b ?? null);
     }
 
-    markChatRead(chatId).catch(() => null);
+    markChatRead(resolvedChatId).catch(() => null);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 100);
     setLoading(false);
   };

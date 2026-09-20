@@ -20,6 +20,7 @@ import { Spacing } from '../constants/Layout';
 import { Colors, Font, Radius } from '../constants/theme';
 import { ALL_TRADE_SPECIALTIES, ALL_TRADES, POPULAR_SEARCHES, TRADE_ICONS } from '../lib/tradeJobs';
 import { supabase } from '../lib/supabase';
+import { deriveChatId } from '../lib/messageService';
 
 
 const PLAN_META: Record<string, { label: string; color: string }> = {
@@ -249,15 +250,16 @@ export default function FindContractorScreen() {
       return;
     }
     try {
-      const { data: existing } = await supabase
-        .from('conversations')
+      const chatId = deriveChatId(user.id, contractor.id);
+      const { data: existingMsg } = await supabase
+        .from('messages')
         .select('id')
-        .eq('customer_id', user.id)
-        .eq('contractor_id', contractor.id)
+        .eq('chat_id', chatId)
+        .limit(1)
         .maybeSingle();
 
-      if (existing) {
-        router.push(`/chat/${existing.id}`);
+      if (existingMsg) {
+        router.push(`/chat/${contractor.id}`);
         return;
       }
 
@@ -273,20 +275,7 @@ export default function FindContractorScreen() {
       );
       if (!confirmed) return;
 
-      const { data: created, error } = await supabase
-        .from('conversations')
-        .insert({
-          customer_id:     user.id,
-          contractor_id:   contractor.id,
-          customer_name:   user.user_metadata?.full_name ?? user.email,
-          contractor_name: contractor.company_name,
-          status:          'pending',
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      router.push(`/chat/${created.id}`);
+      router.push(`/chat/${contractor.id}`);
     } catch (err: any) {
       Alert.alert('Error', err.message);
     }
