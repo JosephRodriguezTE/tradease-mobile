@@ -22,6 +22,7 @@ import { WorkOrderSheet } from '@/components/WorkOrderSheet';
 import { useAuth } from '@/hooks/useAuth';
 import { DEFAULT_MAP_REGION, MAPBOX_ACCESS_TOKEN } from '@/lib/mapConfig';
 import { supabase } from '@/lib/supabase';
+import { useLocationPermission } from '@/hooks/useLocationPermission';
 import { Type as DesignType } from '@/lib/design/tokens';
 import { paymentProvider } from '@/lib/payment/mock';
 
@@ -1139,6 +1140,7 @@ export default function CustomerWorkOrderScreen() {
   const [showCompletion,   setShowCompletion]   = useState(false);
   const [showLearnMore,    setShowLearnMore]    = useState(false);
   const [shareLocation,    setShareLocation]    = useState(false);
+  const locationPermission = useLocationPermission();
   const [securingPayment,  setSecuringPayment]  = useState(false);
   const [myLoc,            setMyLoc]            = useState<{ lat: number; lng: number } | null>(null);
   const [collapsed, setCollapsed] = useState<Set<SectionKey>>(
@@ -1328,15 +1330,62 @@ export default function CustomerWorkOrderScreen() {
   }, [wo?.id, wo?.booking?.job_lat, wo?.booking?.job_lng, interpolateTo, declineEarlyStart]);
 
   // ── Share location ─────────────────────────────────────────────────────────
+  // toggleShareLocation() below only ever sets shareLocation true once
+  // permission is confirmed granted -- this effect fetches the position on
+  // that transition, and also catches permission revoked from system
+  // Settings while shareLocation was already true (no push event for that,
+  // only the re-check useLocationPermission does on app resume).
   useEffect(() => {
     if (!shareLocation) { setMyLoc(null); return; }
-    Location.requestForegroundPermissionsAsync().then(({ status }) => {
-      if (status !== 'granted') { setShareLocation(false); return; }
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).then(loc => {
-        setMyLoc({ lat: loc.coords.latitude, lng: loc.coords.longitude });
-      });
-    });
-  }, [shareLocation]);
+    if (locationPermission.state !== 'granted') {
+      setShareLocation(false);
+      setMyLoc(null);
+      return;
+    }
+    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).then(loc => {
+      setMyLoc({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+    }).catch(() => {});
+  }, [shareLocation, locationPermission.state]);
+
+  // Was a bare setShareLocation(v => !v) -- the toggle showed "Sharing my
+  // location" (orange, filled icon) the instant it was tapped, before the
+  // permission check that used to live in the effect above had even
+  // started, for the entire duration of any OS prompt. Now nothing flips
+  // to "on" until permission is confirmed.
+  const toggleShareLocation = useCallback(async () => {
+    if (shareLocation) { setShareLocation(false); return; }
+
+    const current = await locationPermission.refresh();
+    if (current === 'granted') { setShareLocation(true); return; }
+
+    if (current === 'blocked') {
+      Alert.alert(
+        'Location Access Needed',
+        'Tradease needs location access to share your location with your contractor. Enable it in Settings.',
+        [
+          { text: 'Not Now', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ]
+      );
+      return;
+    }
+
+    const result = await locationPermission.request();
+    if (result === 'granted') { setShareLocation(true); return; }
+
+    if (result === 'blocked') {
+      Alert.alert(
+        'Location Access Needed',
+        'Tradease needs location access to share your location with your contractor. Enable it in Settings.',
+        [
+          { text: 'Not Now', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ]
+      );
+    } else {
+      Alert.alert('Location Access Needed', 'Tradease needs location access to share your location with your contractor.');
+    }
+  }, [shareLocation, locationPermission]);
 
   // ── Payment hold ──────────────────────────────────────────────────────────
   // Routed through paymentProvider (lib/payment/mock.ts) instead of a direct
@@ -1605,7 +1654,7 @@ export default function CustomerWorkOrderScreen() {
           <View style={{ paddingHorizontal: 16, paddingVertical: 10 }}>
             <TouchableOpacity
               style={s.sheetShareBtn}
-              onPress={() => setShareLocation(v => !v)}
+              onPress={toggleShareLocation}
               accessibilityRole="switch"
               accessibilityLabel="Share my location with contractor"
               accessibilityState={{ checked: shareLocation }}

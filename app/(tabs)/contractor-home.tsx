@@ -11,6 +11,7 @@ import { useRole, EmployeeRecord } from '@/hooks/useRole';
 import { supabase } from '@/lib/supabase';
 import { deriveChatId } from '@/lib/messageService';
 import { startLiveTracking, stopLiveTracking } from '@/lib/locationService';
+import { useLocationPermission } from '@/hooks/useLocationPermission';
 import { haversine } from '@/lib/geo';
 import { formatReopensIn } from '@/lib/time';
 import { OnboardingColors as OC, OnboardingSpacing as OS2, FontSize as FS } from '@/lib/design/onboarding-tokens';
@@ -19,7 +20,7 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal,
+    ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Linking, Modal,
     Platform, RefreshControl,
     ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
@@ -648,6 +649,7 @@ export default function ContractorHomeScreen() {
   }, [isEmployee, employerContractorId, employeeRecord]);
 
   const [contractor, setContractor] = useState<any>(null);
+  const locationPermission = useLocationPermission();
   const [earnings,   setEarnings]   = useState<Earnings | null>(null);
   const [jobs,       setJobs]       = useState<Job[]>([]);
   const [activeOffers,   setActiveOffers]   = useState<any[]>([]);
@@ -960,6 +962,15 @@ export default function ContractorHomeScreen() {
   }
 
   // ── Online/offline toggle — owners only ──────────────────────────────────────
+  // Going online used to write is_available/is_online to the DB and flip the
+  // switch on the UI *before* startLiveTracking() (and the permission check
+  // inside it) ever resolved -- that call wasn't even awaited, its rejection
+  // went to an empty .catch(() => {}). So the toggle could show "Online" and
+  // stay that way in the DB with location permission actually denied, and
+  // no GPS update ever going out again -- silently. Now permission is
+  // confirmed granted *before* anything is written, with a real message and
+  // a path to Settings on denial, and going online never optimistically
+  // writes true.
   async function toggleOnline() {
     if (!contractor || roleRef.current.isEmployee) return;
     const next = !contractor.is_available;
@@ -971,7 +982,18 @@ export default function ContractorHomeScreen() {
       setVerifyGateOpen(true);
       return;
     }
-    setTogglingOnline(true);
+
+    if (next) {
+      setTogglingOnline(true);
+      const granted = await ensureLocationPermissionOrExplain();
+      if (!granted) {
+        setTogglingOnline(false);
+        return;
+      }
+    } else {
+      setTogglingOnline(true);
+    }
+
     const { error } = await supabase
       .from('contractors')
       .update({ is_available: next, is_online: next })
@@ -979,8 +1001,15 @@ export default function ContractorHomeScreen() {
     if (!error) {
       setContractor((p: any) => ({ ...p, is_available: next, is_online: next }));
       if (next) {
-        // Start broadcasting GPS when going online
-        startLiveTracking(contractor.id).catch(() => {});
+        // Permission is already confirmed above; still guard against a
+        // rare later failure (e.g. GPS hardware) instead of assuming success.
+        try {
+          await startLiveTracking(contractor.id);
+        } catch (e: any) {
+          await supabase.from('contractors').update({ is_available: false, is_online: false }).eq('id', contractor.id);
+          setContractor((p: any) => ({ ...p, is_available: false, is_online: false }));
+          Alert.alert('Could Not Go Online', e?.message || 'Location tracking failed to start. Try again.');
+        }
       } else {
         // Stop broadcasting and mark offline in location table
         stopLiveTracking();
@@ -1000,6 +1029,65 @@ export default function ContractorHomeScreen() {
     }
     setTogglingOnline(false);
   }
+
+  // Returns true only once foreground location permission is actually
+  // granted. Shows a real message and, when the OS won't prompt again
+  // ("don't ask again" on Android, or already-denied on iOS), a button
+  // straight to Settings instead of a dead-end alert.
+  async function ensureLocationPermissionOrExplain(): Promise<boolean> {
+    const current = await locationPermission.refresh();
+    if (current === 'granted') return true;
+
+    if (current === 'blocked') {
+      Alert.alert(
+        'Location Access Needed',
+        'Tradease needs location access to go online and send jobs your way. Enable it in Settings.',
+        [
+          { text: 'Not Now', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ]
+      );
+      return false;
+    }
+
+    const result = await locationPermission.request();
+    if (result === 'granted') return true;
+
+    if (result === 'blocked') {
+      Alert.alert(
+        'Location Access Needed',
+        'Tradease needs location access to go online and send jobs your way. Enable it in Settings.',
+        [
+          { text: 'Not Now', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ]
+      );
+    } else {
+      Alert.alert('Location Access Needed', 'Tradease needs location access to go online and send jobs your way.');
+    }
+    return false;
+  }
+
+  // Catches a permission revoked from system Settings while the app was
+  // backgrounded -- there's no push event for that, only a re-check on
+  // resume (see useLocationPermission). If this contractor is showing
+  // online with permission now denied/blocked, correct it instead of
+  // silently leaving a stale "Online" toggle with no GPS behind it.
+  useEffect(() => {
+    if (roleRef.current.isEmployee) return;
+    if (!contractor?.is_available) return;
+    if (locationPermission.state === 'granted' || locationPermission.state === 'undetermined') return;
+
+    stopLiveTracking();
+    supabase.from('contractors').update({ is_available: false, is_online: false }).eq('id', contractor.id).then(() => {});
+    supabase.from('contractor_locations').upsert({
+      contractor_id: contractor.id,
+      is_online: false,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'contractor_id' }).then(() => {});
+    setContractor((p: any) => (p ? { ...p, is_available: false, is_online: false } : p));
+    Alert.alert('You\'re Now Offline', 'Location access was turned off, so Tradease took you offline. Enable it in Settings to go back online.');
+  }, [locationPermission.state, contractor?.is_available, contractor?.id]);
 
   // ── Auto-start tracking if already online on mount ────────────────────────────
   useEffect(() => {
