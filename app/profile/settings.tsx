@@ -140,8 +140,6 @@ export default function SettingsScreen() {
   const { isContractor, role } = useRole();
   const { isAdmin } = useIsAdmin();
 
-  const [pushEnabled,  setPushEnabled]   = useState(true);
-  const [emailEnabled, setEmailEnabled]  = useState(true);
   const [signingOut,   setSigningOut]    = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
 
@@ -204,9 +202,11 @@ export default function SettingsScreen() {
     ] : []),
   ];
 
+  // Push/Email used to be their own local toggles here, duplicating
+  // /profile/notifications (which already has a real "Notifications" row
+  // in accountRows above pointing at it) with fake useState that read and
+  // wrote nothing. One UI for notification preferences now, not two.
   const prefRows: RowItem[] = [
-    { id:'push',  icon:'phone-portrait-outline', iconColor:'#34D399', label:'Push Notifications', toggle:true, toggleValue:pushEnabled,  onToggle:setPushEnabled },
-    { id:'email', icon:'mail-outline',           iconColor:'#60A5FA', label:'Email Updates',       toggle:true, toggleValue:emailEnabled, onToggle:setEmailEnabled },
     { id:'appearance', icon: isDark ? 'moon' : 'sunny', iconColor:'#FBBF24', label:'Appearance', value:modeLabel, onPress:() => setAppearanceOpen(true) },
     { id:'lang',  icon:'language-outline',       iconColor:'#F472B6', label:'Language',            value:'English', comingSoon:true, disabled:true },
   ];

@@ -225,9 +225,6 @@ function RootLayout() {
           <Stack.Screen name="admin/disputes" />
           <Stack.Screen name="admin/refunds" />
 
-          {/* ── Referrals ── */}
-          <Stack.Screen name="referrals" />
-
           {/* ── Invite ── */}
           <Stack.Screen name="invite/[token]" options={{ animation: 'slide_from_bottom' }} />
 

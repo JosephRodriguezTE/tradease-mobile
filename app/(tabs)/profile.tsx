@@ -794,8 +794,6 @@ function ContractorProfileView({ profile, isOwner, teamActiveCount }: {
               />
           }
           <View style={styles.menuDivider} />
-          <MenuItem icon="🔔" label="Notifications"         onPress={() => router.push('/profile/notifications')} />
-          <View style={styles.menuDivider} />
           <MenuItem icon="💳" label="Payment Methods"       onPress={() => router.push('/profile/payments')} />
           <View style={styles.menuDivider} />
           <MenuItem icon="📅" label="Schedule & Calendar"
@@ -824,7 +822,7 @@ function ContractorProfileView({ profile, isOwner, teamActiveCount }: {
           <View style={styles.menuDivider} />
           <MenuItem icon="💬" label="Contact Support"       onPress={() => router.push('/profile/contact')} />
           <View style={styles.menuDivider} />
-          <MenuItem icon="🎁" label="Refer & Earn"          onPress={() => router.push('/referrals' as any)} />
+          <MenuItem icon="🔔" label="Notification Preferences" onPress={() => router.push('/profile/notifications')} />
         </View>
       </View>
 
@@ -1132,8 +1130,6 @@ function CustomerProfileView({ profile, bookingStats }: { profile: any; bookingS
           <View style={styles.menuDivider} />
           <MenuItem icon="👤" label="Personal Information"  onPress={() => router.push('/profile/personal-info')} />
           <View style={styles.menuDivider} />
-          <MenuItem icon="🔔" label="Notifications"         onPress={() => router.push('/profile/notifications')} />
-          <View style={styles.menuDivider} />
           <MenuItem icon="💳" label="Payment Methods"       onPress={() => router.push('/profile/payments')} />
           <View style={styles.menuDivider} />
           <MenuItem icon="🔒" label="Privacy & Security"    onPress={() => router.push('/profile/privacy')} />
@@ -1141,6 +1137,8 @@ function CustomerProfileView({ profile, bookingStats }: { profile: any; bookingS
           <MenuItem icon="⚙️" label="Settings"             onPress={() => router.push('/profile/settings')} />
           <View style={styles.menuDivider} />
           <MenuItem icon="💬" label="Contact Support"       onPress={() => router.push('/profile/contact')} />
+          <View style={styles.menuDivider} />
+          <MenuItem icon="🔔" label="Notification Preferences" onPress={() => router.push('/profile/notifications')} />
         </View>
       </View>
 

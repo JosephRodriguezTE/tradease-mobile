@@ -1,7 +1,6 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-    Alert,
     ScrollView,
     StyleSheet,
     Switch,
@@ -10,87 +9,131 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { HammerLoader } from '@/components/HammerLoader';
+import { useAuth } from '@/hooks/useAuth';
+import { useRole } from '@/hooks/useRole';
+import { supabase } from '@/lib/supabase';
 import { Spacing } from '../../constants/Layout';
 import { Colors, Font, Radius } from '../../constants/theme';
 import { useTheme } from '@/context/ThemeContext';
 
-interface NotifSetting {
-  id: string;
-  label: string;
-  sub: string;
-  value: boolean;
-}
+// Same keys, defaults, and target columns as the website's
+// app/dashboard/_settings/NotificationsSection.tsx -- one shared shape,
+// written to the same users.notification_prefs / contractors.notification_prefs
+// jsonb column the website already reads and writes. This screen used to be
+// entirely local useState (fake groups that didn't map to any real column,
+// a "Save" button that only showed an Alert) -- now it reads/writes the
+// real column and auto-saves the way the website's own UI does.
+const CUSTOMER_DEFAULTS = {
+  push_new_message:           true,
+  push_job_accepted:          true,
+  push_job_status:            true,
+  push_job_completed:         true,
+  email_booking_confirmation: true,
+  email_contractor_matched:   true,
+  email_job_completed:        true,
+  email_job_cancelled:        true,
+  email_new_message:          true,
+} as const;
 
-interface NotifGroup {
-  title: string;
-  icon: string;
-  items: NotifSetting[];
-}
+const CONTRACTOR_DEFAULTS = {
+  push_new_job:           true,
+  push_new_message:       true,
+  push_booking_confirmed: true,
+  push_payment_received:  true,
+  email_new_message:      true,
+  email_job_cancelled:    true,
+  email_verification:     true,
+} as const;
+
+const CUSTOMER_PUSH = [
+  { key: 'push_new_message',   label: 'New Messages',      sub: 'When you receive a chat message' },
+  { key: 'push_job_accepted',  label: 'Job Accepted',       sub: 'When a contractor accepts your job' },
+  { key: 'push_job_status',    label: 'Job Status Updates', sub: 'En route, arrived, in progress' },
+  { key: 'push_job_completed', label: 'Job Completed',      sub: 'When your job is marked done' },
+];
+const CUSTOMER_EMAIL = [
+  { key: 'email_booking_confirmation', label: 'Booking Confirmation', sub: 'Confirmation your booking was received' },
+  { key: 'email_contractor_matched',   label: 'Contractor Accepted',  sub: 'When a contractor accepts your job' },
+  { key: 'email_job_completed',        label: 'Job Completed',        sub: 'When your job is marked done' },
+  { key: 'email_job_cancelled',        label: 'Job Cancelled',        sub: 'If your job is cancelled' },
+  { key: 'email_new_message',          label: 'New Messages',         sub: 'When you receive a chat message' },
+];
+const CONTRACTOR_PUSH = [
+  { key: 'push_new_job',           label: 'New Job Nearby',    sub: 'New jobs posted in your area' },
+  { key: 'push_new_message',       label: 'New Messages',      sub: 'When you receive a chat message' },
+  { key: 'push_booking_confirmed', label: 'Booking Confirmed', sub: 'When a job you accepted is confirmed' },
+  { key: 'push_payment_received',  label: 'Payment Received',  sub: 'When a payout lands' },
+];
+const CONTRACTOR_EMAIL = [
+  { key: 'email_new_message',   label: 'New Messages',        sub: 'When you receive a chat message' },
+  { key: 'email_job_cancelled', label: 'Job Cancelled',        sub: 'If a customer cancels a booking' },
+  { key: 'email_verification',  label: 'Verification Updates', sub: 'Changes to your verification status' },
+];
+
+type Prefs = Record<string, boolean>;
 
 export default function NotificationsScreen() {
   const { colors: Colors } = useTheme();
   const router = useRouter();
+  const { user } = useAuth();
+  const { isContractor, employerContractorId, loading: roleLoading } = useRole();
 
-  const [groups, setGroups] = useState<NotifGroup[]>([
-    {
-      title: 'Booking Updates',
-      icon: '📅',
-      items: [
-        { id: 'job_accepted', label: 'Job Accepted', sub: 'When a contractor accepts your job', value: true },
-        { id: 'contractor_arrival', label: 'Contractor Arrival', sub: 'When contractor is on the way', value: true },
-        { id: 'job_completed', label: 'Job Completed', sub: 'When your job is marked done', value: true },
-      ],
-    },
-    {
-      title: 'Messages',
-      icon: '💬',
-      items: [
-        { id: 'new_message', label: 'New Messages', sub: 'When you receive a chat message', value: true },
-        { id: 'support_reply', label: 'Support Responses', sub: 'Replies from Tradease support', value: true },
-      ],
-    },
-    {
-      title: 'Promotions & Offers',
-      icon: '🎁',
-      items: [
-        { id: 'discounts', label: 'Discounts', sub: 'Exclusive deals and savings', value: false },
-        { id: 'seasonal', label: 'Seasonal Offers', sub: 'Holiday and seasonal promotions', value: false },
-        { id: 'referral', label: 'Referral Rewards', sub: 'Updates on your referral earnings', value: true },
-      ],
-    },
-    {
-      title: 'Account & Security',
-      icon: '🔒',
-      items: [
-        { id: 'login_alert', label: 'Login Alerts', sub: 'New device sign-ins detected', value: true },
-        { id: 'password_change', label: 'Password Changes', sub: 'When your password is updated', value: true },
-        { id: 'payment_notif', label: 'Payment Notifications', sub: 'Charges, refunds and payouts', value: true },
-      ],
-    },
-  ]);
+  const [prefs,    setPrefs]    = useState<Prefs>({});
+  const [loading,  setLoading]  = useState(true);
+  const [savedKey, setSavedKey] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [pushEnabled, setPushEnabled] = useState(true);
-  const [emailEnabled, setEmailEnabled] = useState(true);
-  const [smsEnabled, setSmsEnabled] = useState(false);
+  const table    = isContractor ? 'contractors' : 'users';
+  // An employee's own id has no contractors row -- notification_prefs lives
+  // on the employer's row, same as the website has no equivalent case to
+  // worry about (it only ever renders this for the account owner).
+  const targetId = isContractor ? (employerContractorId ?? user?.id) : user?.id;
 
-  const toggle = (groupIdx: number, itemIdx: number) => {
-    setGroups((prev) => {
-      const next = [...prev];
-      next[groupIdx] = {
-        ...next[groupIdx],
-        items: next[groupIdx].items.map((item, i) =>
-          i === itemIdx ? { ...item, value: !item.value } : item
-        ),
-      };
-      return next;
-    });
-  };
+  useEffect(() => {
+    if (roleLoading || !targetId) return;
+    let cancelled = false;
+    (async () => {
+      const defaults = isContractor ? CONTRACTOR_DEFAULTS : CUSTOMER_DEFAULTS;
+      const { data } = await supabase
+        .from(table)
+        .select('notification_prefs')
+        .eq('id', targetId)
+        .single();
+      if (cancelled) return;
+      const stored = (data?.notification_prefs ?? {}) as Prefs;
+      setPrefs({ ...defaults, ...stored });
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [roleLoading, targetId, isContractor, table]);
 
-  const handleSave = () => {
-    Alert.alert('Saved', 'Your notification preferences have been updated.', [
-      { text: 'OK', onPress: () => router.canGoBack() ? router.back() : router.replace('/(tabs)') },
-    ]);
-  };
+  function handleToggle(key: string, value: boolean) {
+    const next = { ...prefs, [key]: value };
+    setPrefs(next);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => savePrefs(next, key), 500);
+  }
+
+  async function savePrefs(next: Prefs, key: string) {
+    if (!targetId) return;
+    const { error } = await supabase.from(table).update({ notification_prefs: next }).eq('id', targetId);
+    if (!error) {
+      setSavedKey(key);
+      setTimeout(() => setSavedKey(k => (k === key ? null : k)), 2000);
+    }
+  }
+
+  if (loading || roleLoading) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <HammerLoader size={64} />
+      </View>
+    );
+  }
+
+  const pushItems  = isContractor ? CONTRACTOR_PUSH  : CUSTOMER_PUSH;
+  const emailItems = isContractor ? CONTRACTOR_EMAIL : CUSTOMER_EMAIL;
 
   return (
     <View style={styles.container}>
@@ -105,30 +148,25 @@ export default function NotificationsScreen() {
       </SafeAreaView>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.subtitle}>Choose how Tradease keeps you updated.</Text>
+        <Text style={styles.subtitle}>Choose what you want to be notified about. Changes save automatically.</Text>
 
-        {/* Delivery preferences */}
-        <Text style={styles.sectionLabel}>DELIVERY METHOD</Text>
+        <Text style={styles.sectionLabel}>PUSH NOTIFICATIONS</Text>
         <View style={styles.card}>
-          {[
-            { label: 'Push Notifications', sub: 'Alerts on your device', icon: '🔔', value: pushEnabled, set: setPushEnabled },
-            { label: 'Email', sub: 'Sent to your email address', icon: '📧', value: emailEnabled, set: setEmailEnabled },
-            { label: 'SMS', sub: 'Text messages to your phone', icon: '📱', value: smsEnabled, set: setSmsEnabled },
-          ].map((item, i, arr) => (
-            <View key={item.label}>
+          {pushItems.map((item, i, arr) => (
+            <View key={item.key}>
               <View style={styles.toggleRow}>
                 <View style={styles.toggleLeft}>
-                  <View style={styles.toggleIconBox}>
-                    <Text style={styles.toggleIcon}>{item.icon}</Text>
-                  </View>
-                  <View>
-                    <Text style={styles.toggleLabel}>{item.label}</Text>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.labelRow}>
+                      <Text style={styles.toggleLabel}>{item.label}</Text>
+                      {savedKey === item.key && <Text style={styles.savedTxt}>Saved</Text>}
+                    </View>
                     <Text style={styles.toggleSub}>{item.sub}</Text>
                   </View>
                 </View>
                 <Switch
-                  value={item.value}
-                  onValueChange={item.set}
+                  value={prefs[item.key] ?? false}
+                  onValueChange={(v) => handleToggle(item.key, v)}
                   trackColor={{ false: '#2A2A2A', true: Colors.orange }}
                   thumbColor={Colors.white}
                   ios_backgroundColor="#2A2A2A"
@@ -139,60 +177,32 @@ export default function NotificationsScreen() {
           ))}
         </View>
 
-        {/* Notification groups */}
-        {groups.map((group, gi) => (
-          <View key={group.title}>
-            <Text style={styles.sectionLabel}>{group.title.toUpperCase()}</Text>
-            <View style={styles.card}>
-              {group.items.map((item, ii) => (
-                <View key={item.id}>
-                  <View style={styles.toggleRow}>
-                    <View style={styles.toggleLeft}>
-                      <View>
-                        <Text style={styles.toggleLabel}>{item.label}</Text>
-                        <Text style={styles.toggleSub}>{item.sub}</Text>
-                      </View>
+        <Text style={styles.sectionLabel}>EMAIL NOTIFICATIONS</Text>
+        <View style={styles.card}>
+          {emailItems.map((item, i, arr) => (
+            <View key={item.key}>
+              <View style={styles.toggleRow}>
+                <View style={styles.toggleLeft}>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.labelRow}>
+                      <Text style={styles.toggleLabel}>{item.label}</Text>
+                      {savedKey === item.key && <Text style={styles.savedTxt}>Saved</Text>}
                     </View>
-                    <Switch
-                      value={item.value}
-                      onValueChange={() => toggle(gi, ii)}
-                      trackColor={{ false: '#2A2A2A', true: Colors.orange }}
-                      thumbColor={Colors.white}
-                      ios_backgroundColor="#2A2A2A"
-                    />
+                    <Text style={styles.toggleSub}>{item.sub}</Text>
                   </View>
-                  {ii < group.items.length - 1 && <View style={styles.divider} />}
                 </View>
-              ))}
+                <Switch
+                  value={prefs[item.key] ?? false}
+                  onValueChange={(v) => handleToggle(item.key, v)}
+                  trackColor={{ false: '#2A2A2A', true: Colors.orange }}
+                  thumbColor={Colors.white}
+                  ios_backgroundColor="#2A2A2A"
+                />
+              </View>
+              {i < arr.length - 1 && <View style={styles.divider} />}
             </View>
-          </View>
-        ))}
-
-        {/* Preview card */}
-        <Text style={styles.sectionLabel}>NOTIFICATION PREVIEW</Text>
-        <View style={styles.previewCard}>
-          <View style={styles.previewHeader}>
-            <Text style={styles.previewApp}>TRADEASE</Text>
-            <Text style={styles.previewTime}>now</Text>
-          </View>
-          <Text style={styles.previewTitle}>Job Accepted ✅</Text>
-          <Text style={styles.previewBody}>
-            Carlos R. accepted your plumbing job and is confirmed for tomorrow at 9:00 AM.
-          </Text>
+          ))}
         </View>
-
-        {/* Privacy note */}
-        <View style={styles.privacyNote}>
-          <Text style={styles.privacyIcon}>ℹ️</Text>
-          <Text style={styles.privacyText}>
-            You can change notification preferences anytime. Critical security alerts cannot be disabled.
-          </Text>
-        </View>
-
-        {/* Save */}
-        <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-          <Text style={styles.saveBtnText}>Save Preferences</Text>
-        </TouchableOpacity>
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -202,6 +212,7 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0A' },
+  center: { alignItems: 'center', justifyContent: 'center' },
   header: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between',
@@ -226,35 +237,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md, paddingVertical: 14,
   },
   toggleLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  toggleIconBox: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: '#1E1E1E', alignItems: 'center', justifyContent: 'center',
-  },
-  toggleIcon: { fontSize: 18 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   toggleLabel: { fontSize: 14, fontWeight: Font.semibold, color: Colors.white, marginBottom: 2 },
   toggleSub: { fontSize: 12, color: '#555' },
-  previewCard: {
-    backgroundColor: '#141414', borderRadius: 18,
-    borderWidth: 1, borderColor: '#1E1E1E', padding: Spacing.md, gap: 6,
-  },
-  previewHeader: { flexDirection: 'row', justifyContent: 'space-between' },
-  previewApp: { fontSize: 10, fontWeight: Font.black, color: Colors.orange, letterSpacing: 1.5 },
-  previewTime: { fontSize: 11, color: '#555' },
-  previewTitle: { fontSize: 14, fontWeight: Font.bold, color: Colors.white },
-  previewBody: { fontSize: 13, color: '#777', lineHeight: 19 },
-  privacyNote: {
-    flexDirection: 'row', gap: 10,
-    backgroundColor: '#141414', borderRadius: Radius.md,
-    borderWidth: 1, borderColor: '#1E1E1E',
-    padding: Spacing.md, alignItems: 'flex-start',
-  },
-  privacyIcon: { fontSize: 14 },
-  privacyText: { flex: 1, fontSize: 12, color: '#555', lineHeight: 18 },
-  saveBtn: {
-    height: 56, borderRadius: 16, backgroundColor: Colors.orange,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: Colors.orange, shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5, shadowRadius: 20, elevation: 10,
-  },
-  saveBtnText: { fontSize: 16, fontWeight: Font.black, color: Colors.background, letterSpacing: 0.3 },
+  savedTxt: { fontSize: 11, fontWeight: Font.semibold, color: '#22C55E' },
 });
