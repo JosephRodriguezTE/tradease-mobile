@@ -1,0 +1,72 @@
+-- Drop the duplicate lock_booking_on_offer_accepted() trigger registration
+-- on job_offers, and the function itself.
+--
+-- Captured here verbatim before dropping, since neither trigger nor the
+-- function was ever recorded in a migration:
+--
+--   CREATE TRIGGER offer_accepted_lock BEFORE UPDATE ON public.job_offers
+--     FOR EACH ROW EXECUTE FUNCTION lock_booking_on_offer_accepted();
+--
+--   CREATE TRIGGER trg_lock_booking_on_accept AFTER UPDATE ON public.job_offers
+--     FOR EACH ROW EXECUTE FUNCTION lock_booking_on_offer_accepted();
+--
+--   CREATE OR REPLACE FUNCTION public.lock_booking_on_offer_accepted()
+--    RETURNS trigger
+--    LANGUAGE plpgsql
+--    SECURITY DEFINER
+--   AS $function$
+--   BEGIN
+--     IF NEW.status = 'accepted' AND OLD.status != 'accepted' THEN
+--       UPDATE public.bookings
+--       SET
+--         contractor_id   = NEW.contractor_id,
+--         contractor_name = (SELECT company_name FROM public.contractors WHERE id = NEW.contractor_id),
+--         status          = 'accepted',
+--         price_estimate  = NEW.final_price::integer,
+--         accepted_at     = NOW()
+--       WHERE id = NEW.booking_id
+--         AND status = 'pending';
+--       IF NOT FOUND THEN
+--         NEW.status := 'expired';
+--       END IF;
+--     END IF;
+--     RETURN NEW;
+--   END;
+--   $function$
+--
+-- Why this was live corruption, not a safety net: _finalize_job_acceptance()
+-- (the function both accept RPCs -- customer_respond_offer and
+-- contractor_respond_counter -- call) updates bookings.status to
+-- 'confirmed' in its own earlier statement, before it updates job_offers.
+-- By the time this trigger's own bookings sub-update runs (fired by that
+-- job_offers UPDATE), bookings.status is already 'confirmed', never
+-- 'pending' -- so its "WHERE status = 'pending'" guard finds nothing,
+-- every single time, on every real accept, and NEW.status := 'expired'
+-- fires unconditionally. That corruption was only ever masked by trigger
+-- firing order: trg_validate_negotiation (BEFORE UPDATE, same table) sorts
+-- after offer_accepted_lock alphabetically ('o' < 't') and unconditionally
+-- re-sets NEW.status := 'accepted' when contractor_final/customer_action
+-- say so, silently overwriting the 'expired' value moments after this
+-- trigger set it. It happened to keep working by accident of naming, not
+-- by design -- exactly the kind of fragility this cleanup removes.
+--
+-- Confirmed safe to drop entirely, not just de-duplicate to one
+-- registration: every path in both repos that can set job_offers.status /
+-- contractor_final / customer_action to 'accepted' was traced (grepped
+-- both repos for every job_offers write touching 'accepted', and every
+-- public.* function referencing job_offers). Exactly two real write sites
+-- exist -- customer_respond_offer and contractor_respond_counter -- and
+-- both call _finalize_job_acceptance, which already does everything this
+-- function attempted (sets bookings.contractor_id/contractor_name/status/
+-- price_estimate/accepted_at), correctly, without the self-defeating
+-- pending-guard race. The former bypass at
+-- tradease-app app/dashboard/contractor/page.tsx's respondOffer() -- the
+-- only other place job_offers was ever pushed toward 'accepted' -- is
+-- fixed in the same change to call contractor_respond_counter instead of
+-- writing job_offers/bookings directly. No remaining caller needs this
+-- function; nothing else references it (grepped for lock_booking_on_offer_accepted
+-- across both repos and the DB).
+
+DROP TRIGGER IF EXISTS offer_accepted_lock ON public.job_offers;
+DROP TRIGGER IF EXISTS trg_lock_booking_on_accept ON public.job_offers;
+DROP FUNCTION IF EXISTS public.lock_booking_on_offer_accepted();
