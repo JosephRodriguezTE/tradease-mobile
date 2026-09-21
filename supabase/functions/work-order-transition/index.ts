@@ -70,6 +70,30 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify({ success: true, action: "early_start_request" }), { headers: { ...CORS, "Content-Type": "application/json" }, status: 200 });
     }
 
+    if (new_status === "early_start_decline") {
+      const cid = wo.customer_id ?? wo.booking?.customer_id;
+      if (cid !== user.id) throw new Error("Not authorized");
+      const { data: declined, error: declineErr } = await admin
+        .from("work_orders")
+        .update({ early_start_requested: false })
+        .eq("id", work_order_id)
+        .select("early_start_requested")
+        .single();
+      if (declineErr || !declined || declined.early_start_requested !== false) {
+        throw new Error("Could not decline early start.");
+      }
+      if (wo.contractor_id) {
+        await admin.from("notifications").insert({
+          user_id: wo.contractor_id, type: "early_start_declined",
+          title: "Customer declined your early start request",
+          message: "The scheduled start time is unchanged.",
+          booking_id: wo.booking_id ?? null,
+          data: { work_order_id, type: "early_start_declined" },
+        });
+      }
+      return new Response(JSON.stringify({ success: true, action: "early_start_decline" }), { headers: { ...CORS, "Content-Type": "application/json" }, status: 200 });
+    }
+
     if (new_status === "early_start_approve") {
       const cid = wo.customer_id ?? wo.booking?.customer_id;
       if (cid !== user.id) throw new Error("Not authorized");

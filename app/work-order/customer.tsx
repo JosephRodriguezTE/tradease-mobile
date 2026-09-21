@@ -1220,6 +1220,27 @@ export default function CustomerWorkOrderScreen() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => () => { if (interpRef.current) clearInterval(interpRef.current); }, []);
 
+  // ── Early start decline ────────────────────────────────────────────────────
+  // Routed through the same work-order-transition edge function as approve/
+  // request, instead of a bare client .update() -- that path never notified
+  // the contractor (no notifications row existed for a decline anywhere in
+  // the app) and had no write-confirmation, only an error check. Shared
+  // between the two places a customer can decline: the realtime popup (whose
+  // "Decline" button previously had no onPress at all -- it just dismissed
+  // the dialog and wrote nothing) and the persistent banner. Declared before
+  // the realtime effect below, which references it in its dependency array.
+  const declineEarlyStart = useCallback(async (workOrderId: string) => {
+    const { data, error } = await supabase.functions.invoke('work-order-transition', {
+      body: { work_order_id: workOrderId, new_status: 'early_start_decline' },
+    });
+    if (error || !data?.success) {
+      Alert.alert('Error', 'Could not decline. Try again.');
+      return;
+    }
+    setWo(prev => prev ? { ...prev, early_start_requested: false } : prev);
+    Alert.alert('Declined', 'Your contractor has been notified. The original start time is kept.');
+  }, []);
+
   // ─────────────────────────────────────────────────────────────────────────
   // Realtime
   // ─────────────────────────────────────────────────────────────────────────
@@ -1252,7 +1273,7 @@ export default function CustomerWorkOrderScreen() {
               'Early start requested',
               `${updated.contractor_name || 'Your contractor'} wants to start early. Approve?`,
               [
-                { text: 'Decline', style: 'cancel' },
+                { text: 'Decline', style: 'cancel', onPress: () => declineEarlyStart(updated.id) },
                 {
                   text: 'Approve',
                   onPress: async () => {
@@ -1304,7 +1325,7 @@ export default function CustomerWorkOrderScreen() {
       .subscribe();
 
     return () => { supabase.removeChannel(ch); };
-  }, [wo?.id, wo?.booking?.job_lat, wo?.booking?.job_lng, interpolateTo]);
+  }, [wo?.id, wo?.booking?.job_lat, wo?.booking?.job_lng, interpolateTo, declineEarlyStart]);
 
   // ── Share location ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1706,14 +1727,7 @@ export default function CustomerWorkOrderScreen() {
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
             <TouchableOpacity
               style={[s.earlyStartBannerBtn, { backgroundColor: 'rgba(239,68,68,0.08)', borderColor: 'rgba(239,68,68,0.25)' }]}
-              onPress={async () => {
-                const { error } = await supabase
-                  .from('work_orders')
-                  .update({ early_start_requested: false })
-                  .eq('id', wo.id);
-                if (error) { Alert.alert('Error', 'Could not decline. Try again.'); return; }
-                setWo(prev => prev ? { ...prev, early_start_requested: false } : prev);
-              }}
+              onPress={() => declineEarlyStart(wo.id)}
               accessibilityRole="button"
               accessibilityLabel="Decline early start"
             >
