@@ -711,33 +711,33 @@ export default function ContractorHomeScreen() {
     // returns these rows to them; it fuzzes the coordinates and omits
     // customer identity until the job is claimed.
     //
-    // trade_filter is passed null here (was c?.trade_type) -- the RPC's
-    // param only supports one exact-match value, but a contractor can have
-    // several trades via contractor_trades. Filtering happens below with
-    // jobMatchesContractorTrades() instead, the same function the realtime
-    // feed uses, so the two can't drift out of sync again.
+    // trade_filter_ids does the membership check server-side now (contractor's
+    // full contractor_trades list, trade_type as fallback -- same rule as
+    // contractorTradeIds() below, computed once and passed down instead of
+    // pulling every trade's jobs and filtering client-side). trade_filter
+    // (singular) stays null here -- that's the separate manual dropdown
+    // concept map.tsx uses, not this contractor's own trades.
     //
     // No lat/lng on file means no meaningful "nearby" result -- skip the
     // call rather than pass nulls into the RPC's distance filter, which
     // would just silently return nothing.
+    const myTradeIds = contractorTradeIds(c);
     const { data: rawJobs } = c?.lat && c?.lng
       ? await supabase.rpc('public_jobs_nearby', {
           user_lat: c.lat,
           user_lng: c.lng,
           max_miles: 30,
           trade_filter: null,
+          trade_filter_ids: myTradeIds.length > 0 ? myTradeIds : null,
         })
       : { data: [] as any[] };
 
-    const myTradeIds = contractorTradeIds(c);
-    const withDist = (rawJobs ?? [])
-      .filter((j: any) => jobMatchesContractorTrades(j.trade, myTradeIds))
-      .map((j: any) => ({
-        ...j,
-        distance_miles: c?.lat && c?.lng && j.fuzzed_lat && j.fuzzed_lng
-          ? haversine(c.lat, c.lng, j.fuzzed_lat, j.fuzzed_lng)
-          : undefined,
-      }));
+    const withDist = (rawJobs ?? []).map((j: any) => ({
+      ...j,
+      distance_miles: c?.lat && c?.lng && j.fuzzed_lat && j.fuzzed_lng
+        ? haversine(c.lat, c.lng, j.fuzzed_lat, j.fuzzed_lng)
+        : undefined,
+    }));
     setJobs(withDist);
 
     // Missed money — jobs that came in while offline yesterday, still
@@ -810,63 +810,57 @@ export default function ContractorHomeScreen() {
   useEffect(() => { contractorRef.current = contractor; }, [contractor]);
 
   // ── Realtime — new jobs ping instantly ───────────────────────────────────────
-  // KNOWN GAP, not fixed here: Supabase Realtime enforces the same RLS as a
-  // direct SELECT, so this postgres_changes subscription on bookings never
-  // receives an INSERT event for a job this contractor isn't allowed to
-  // SELECT -- i.e. never, for a genuinely new unclaimed job, same root
-  // cause as the direct-query bug above. Unlike a REST query this can't be
-  // pointed at a SECURITY DEFINER RPC instead; Realtime only watches real
-  // tables. The instant same-session ping for leads/pro plans is therefore
-  // silently inert for this exact case -- push notifications (a separate,
-  // working system) are the only thing that currently tells a browsing
-  // contractor a new job exists. Left alone pending a real design (e.g. a
-  // broadcast channel a trigger publishes fuzzed job data into).
+  // Runs on Realtime Broadcast (per-trade topics 'leads:<trade>'), not
+  // postgres_changes on bookings. postgres_changes re-applies bookings' RLS
+  // per subscriber, and a browsing contractor never satisfies
+  // bookings_owner_or_assigned_contractor_select for a brand-new job
+  // (contractor_id is null pre-claim) -- verified empirically that this
+  // channel shape never delivered a live event to a real contractor session,
+  // only to an is_admin one via admin_all_bookings' unrestricted policy.
+  // trg_broadcast_new_job_lead (DB) builds the same narrow, server-fuzzed
+  // shape public_jobs_nearby() already returns and sends it to the topic
+  // for its trade -- no customer identity, no exact coordinates, ever, by
+  // construction. Subscribing only to this contractor's own trade topics
+  // means there's no client-side trade check left to drift out of sync with
+  // the list the way the last bug happened -- topic routing IS the filter.
+  const tradeIdsKey = JSON.stringify(contractorTradeIds(contractor));
   useEffect(() => {
-    const ch = supabase
-      .channel(`jobs_feed_${Math.random().toString(36).slice(2, 9)}`)
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'bookings' },
-        (payload) => {
-          const c    = contractorRef.current;
-          const plan = c?.plan as string | undefined;
-          const raw  = payload.new as any;
+    const plan = contractor?.plan as string | undefined;
+    if (plan !== 'leads' && plan !== 'pro') return;
+    const myTradeIds = contractorTradeIds(contractor);
+    if (myTradeIds.length === 0) return;
 
-          // Same jobMatchesContractorTrades() the list uses in load() --
-          // membership against the contractor's full trade list, with a
-          // trade_type fallback only when contractor_trades has no rows
-          // yet (see contractorTradeIds()), not an unconditional
-          // match-everything default.
-          const tradeMatches = jobMatchesContractorTrades(raw.trade, contractorTradeIds(c));
-          if ((plan === 'leads' || plan === 'pro') && raw?.id && !raw.contractor_id && raw.status === 'pending' && tradeMatches) {
-            const priorityJob: Job = {
-              id:              raw.id,
-              trade:           raw.trade ?? '',
-              description:     raw.description ?? '',
-              urgency:         raw.urgency ?? null,
-              price_estimate:  raw.price_estimate ?? null,
-              payout_max:      raw.payout_max ?? null,
-              job_lat:         raw.job_lat ?? null,
-              job_lng:         raw.job_lng ?? null,
-              job_address:     raw.job_address ?? null,
-              customer_id:     raw.customer_id ?? '',
-              customer_name:   raw.customer_name ?? 'Customer',
-              customer_rating: raw.customer_rating ?? null,
-              created_at:      raw.created_at,
-              distance_miles:  raw.job_lat && raw.job_lng && c?.lat && c?.lng
-                ? haversine(c.lat, c.lng, raw.job_lat, raw.job_lng)
-                : undefined,
-              priority:        true,
-              priorityType:    plan as 'leads' | 'pro',
-            };
-            setJobs(prev => [priorityJob, ...prev.filter(j => j.id !== raw.id)]);
-          } else {
-            load(true);
-          }
+    const channels = myTradeIds.map((tradeId) =>
+      supabase
+        .channel(`leads:${tradeId}`, { config: { private: true } })
+        .on('broadcast', { event: 'new_lead' }, (msg) => {
+          const c   = contractorRef.current;
+          const raw = msg.payload as any;
+          const priorityJob: Job = {
+            id:              raw.id,
+            trade:           raw.trade ?? '',
+            description:     raw.description ?? '',
+            urgency:         raw.urgency ?? null,
+            price_estimate:  raw.price_estimate ?? null,
+            payout_max:      null,
+            job_lat:         null,
+            job_lng:         null,
+            job_address:     null,
+            customer_rating: null,
+            created_at:      raw.created_at,
+            distance_miles:  raw.fuzzed_lat && raw.fuzzed_lng && c?.lat && c?.lng
+              ? haversine(c.lat, c.lng, raw.fuzzed_lat, raw.fuzzed_lng)
+              : undefined,
+            priority:        true,
+            priorityType:    (c?.plan as 'leads' | 'pro') ?? 'leads',
+          };
+          setJobs(prev => [priorityJob, ...prev.filter(j => j.id !== raw.id)]);
         })
-      .subscribe();
-    channelRef.current = ch;
-    return () => { supabase.removeChannel(ch); };
-  }, [load]);
+        .subscribe()
+    );
+    channelRef.current = channels;
+    return () => { channels.forEach((ch) => supabase.removeChannel(ch)); };
+  }, [contractor?.plan, tradeIdsKey]);
 
   // ── Realtime — notification badge ───────────────────────────────────────────
   useEffect(() => {
