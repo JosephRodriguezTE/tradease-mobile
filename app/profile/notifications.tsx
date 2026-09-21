@@ -87,7 +87,7 @@ export default function NotificationsScreen() {
   const { colors: Colors } = useTheme();
   const router = useRouter();
   const { user } = useAuth();
-  const { isContractor, employerContractorId, loading: roleLoading } = useRole();
+  const { isContractor, isEmployee, employerContractorId, loading: roleLoading } = useRole();
 
   const [prefs,    setPrefs]    = useState<Prefs>({});
   const [loading,  setLoading]  = useState(true);
@@ -101,7 +101,14 @@ export default function NotificationsScreen() {
   const targetId = isContractor ? (employerContractorId ?? user?.id) : user?.id;
 
   useEffect(() => {
-    if (roleLoading || !targetId) return;
+    // Employees get a read-only message instead (rendered below) -- no
+    // toggles to load. notification_prefs lives on the employer's
+    // contractors row either way (per useRole()'s employerContractorId),
+    // so an employee's own toggle would silently be controlling the
+    // owner's -- and everyone else's -- notifications. Not fixed here
+    // (would need its own storage on employees, a schema decision), just
+    // not exposed as if it were personal.
+    if (roleLoading || isEmployee || !targetId) { if (!roleLoading) setLoading(false); return; }
     let cancelled = false;
     (async () => {
       const defaults = isContractor ? CONTRACTOR_DEFAULTS : CUSTOMER_DEFAULTS;
@@ -116,7 +123,7 @@ export default function NotificationsScreen() {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [roleLoading, targetId, isContractor, table]);
+  }, [roleLoading, isEmployee, targetId, isContractor, table]);
 
   function handleToggle(key: string, value: boolean) {
     const next = { ...prefs, [key]: value };
@@ -138,6 +145,27 @@ export default function NotificationsScreen() {
     return (
       <View style={[styles.container, styles.center]}>
         <HammerLoader size={64} />
+      </View>
+    );
+  }
+
+  if (isEmployee) {
+    return (
+      <View style={styles.container}>
+        <SafeAreaView edges={['top']}>
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')}>
+              <Text style={styles.backArrow}>←</Text>
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Notifications</Text>
+            <View style={{ width: 40 }} />
+          </View>
+        </SafeAreaView>
+        <View style={[styles.center, { flex: 1, paddingHorizontal: Spacing.lg }]}>
+          <Text style={styles.employeeMsg}>
+            Notification preferences are managed by the account owner.
+          </Text>
+        </View>
       </View>
     );
   }
@@ -223,6 +251,7 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0A' },
   center: { alignItems: 'center', justifyContent: 'center' },
+  employeeMsg: { fontSize: 14, color: '#666', lineHeight: 21, textAlign: 'center' },
   header: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between',
