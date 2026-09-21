@@ -76,6 +76,30 @@ function fmt(n: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
 }
 
+// Single source of truth for "does this job's trade match this contractor,"
+// shared by the realtime feed and the non-realtime list load() -- they must
+// stay identical or one silently drifts from the other (which is how the
+// list ended up checking only trade_type while realtime checked the full
+// contractor_trades list). trade_type is a denormalized cache of just the
+// PRIMARY trade (contractor_trades_maintain()), so it's only a fallback for
+// a contractor who hasn't been migrated into contractor_trades yet -- once
+// contractor_trades has rows, those are the full, authoritative multi-trade
+// list and trade_type is ignored here.
+function contractorTradeIds(c: { trade_type?: string | null; contractor_trades?: { trade_id: string }[] } | null | undefined): string[] {
+  const fromJoin = (c?.contractor_trades ?? []).map(t => t.trade_id);
+  if (fromJoin.length > 0) return fromJoin;
+  return c?.trade_type ? [c.trade_type] : [];
+}
+
+function jobMatchesContractorTrades(jobTrade: string | null | undefined, tradeIds: string[]): boolean {
+  // Empty tradeIds only happens when the contractor has neither
+  // contractor_trades rows nor a trade_type set at all -- no trade info
+  // whatsoever, not "matches everything by default" for someone who simply
+  // hasn't synced their multi-select trades yet (that case is handled by
+  // the trade_type fallback in contractorTradeIds above).
+  return tradeIds.length === 0 || (!!jobTrade && tradeIds.includes(jobTrade));
+}
+
 
 function getJobStatusLabel(status: string) {
   return ({ confirmed: 'Confirmed', in_progress: 'In Progress', completed: 'Awaiting Payment' } as Record<string,string>)[status] ?? status;
@@ -687,6 +711,12 @@ export default function ContractorHomeScreen() {
     // returns these rows to them; it fuzzes the coordinates and omits
     // customer identity until the job is claimed.
     //
+    // trade_filter is passed null here (was c?.trade_type) -- the RPC's
+    // param only supports one exact-match value, but a contractor can have
+    // several trades via contractor_trades. Filtering happens below with
+    // jobMatchesContractorTrades() instead, the same function the realtime
+    // feed uses, so the two can't drift out of sync again.
+    //
     // No lat/lng on file means no meaningful "nearby" result -- skip the
     // call rather than pass nulls into the RPC's distance filter, which
     // would just silently return nothing.
@@ -695,16 +725,19 @@ export default function ContractorHomeScreen() {
           user_lat: c.lat,
           user_lng: c.lng,
           max_miles: 30,
-          trade_filter: c?.trade_type ?? null,
+          trade_filter: null,
         })
       : { data: [] as any[] };
 
-    const withDist = (rawJobs ?? []).map((j: any) => ({
-      ...j,
-      distance_miles: c?.lat && c?.lng && j.fuzzed_lat && j.fuzzed_lng
-        ? haversine(c.lat, c.lng, j.fuzzed_lat, j.fuzzed_lng)
-        : undefined,
-    }));
+    const myTradeIds = contractorTradeIds(c);
+    const withDist = (rawJobs ?? [])
+      .filter((j: any) => jobMatchesContractorTrades(j.trade, myTradeIds))
+      .map((j: any) => ({
+        ...j,
+        distance_miles: c?.lat && c?.lng && j.fuzzed_lat && j.fuzzed_lng
+          ? haversine(c.lat, c.lng, j.fuzzed_lat, j.fuzzed_lng)
+          : undefined,
+      }));
     setJobs(withDist);
 
     // Missed money — jobs that came in while offline yesterday, still
@@ -798,17 +831,12 @@ export default function ContractorHomeScreen() {
           const plan = c?.plan as string | undefined;
           const raw  = payload.new as any;
 
-          // Membership against the contractor's full trade list, not an
-          // exact-match against trade_type. trade_type is now a
-          // denormalized cache of just the PRIMARY trade (see
-          // contractor_trades_maintain()) -- a multi-trade contractor's
-          // trade_type is a single name, e.g. 'HVAC', so a new
-          // 'Electrical' job posted would never have matched their
-          // second trade under the old exact-match check. No trades set
-          // at all still means "show me everything," matching the old
-          // behavior for that case.
-          const myTradeIds: string[] = (c?.contractor_trades ?? []).map((t: any) => t.trade_id);
-          const tradeMatches = myTradeIds.length === 0 || myTradeIds.includes(raw.trade);
+          // Same jobMatchesContractorTrades() the list uses in load() --
+          // membership against the contractor's full trade list, with a
+          // trade_type fallback only when contractor_trades has no rows
+          // yet (see contractorTradeIds()), not an unconditional
+          // match-everything default.
+          const tradeMatches = jobMatchesContractorTrades(raw.trade, contractorTradeIds(c));
           if ((plan === 'leads' || plan === 'pro') && raw?.id && !raw.contractor_id && raw.status === 'pending' && tradeMatches) {
             const priorityJob: Job = {
               id:              raw.id,
