@@ -26,7 +26,6 @@ import {
   subscribeToChatMessages,
   unsubscribeFromChat,
 } from '../../lib/messageService';
-import { sendPushNotification } from '../../lib/notifications';
 
 const PRE_BOOKING_LIMIT = 3;
 
@@ -207,16 +206,11 @@ export default function ChatScreen() {
       });
       setMessages(prev => [...prev, msg]);
       setText('');
-      // Non-blocking push to recipient
-      sendPushNotification({
-        userId:    otherId,
-        type:      'new_message',
-        title:     myName,
-        message:   trimmed.length > 80 ? trimmed.slice(0, 80) + '…' : trimmed,
-        actorName: myName,
-        icon:      'chatbubble-outline',
-        data:      { chat_id: chatId },
-      });
+      // Push to the recipient already happens -- on_new_message fires on
+      // every messages insert unconditionally (trigger_send_push_notification),
+      // regardless of which app wrote the row. This used to also call
+      // sendPushNotification() directly, which inserted a second
+      // notifications row for the same message and sent a second push.
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
     } catch (err: any) {
       if (err?.message?.includes('PRE_BOOKING_LIMIT_REACHED')) {
