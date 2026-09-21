@@ -29,6 +29,8 @@ const CUSTOMER_DEFAULTS = {
   push_job_accepted:          true,
   push_job_status:            true,
   push_job_completed:         true,
+  push_job_cancelled:         true,
+  push_early_start:           true,
   email_booking_confirmation: true,
   email_contractor_matched:   true,
   email_job_completed:        true,
@@ -41,6 +43,9 @@ const CONTRACTOR_DEFAULTS = {
   push_new_message:       true,
   push_booking_confirmed: true,
   push_payment_received:  true,
+  push_job_status:        true,
+  push_job_cancelled:     true,
+  push_early_start:       true,
   email_new_message:      true,
   email_job_cancelled:    true,
   email_verification:     true,
@@ -51,6 +56,8 @@ const CUSTOMER_PUSH = [
   { key: 'push_job_accepted',  label: 'Job Accepted',       sub: 'When a contractor accepts your job' },
   { key: 'push_job_status',    label: 'Job Status Updates', sub: 'En route, arrived, in progress' },
   { key: 'push_job_completed', label: 'Job Completed',      sub: 'When your job is marked done' },
+  { key: 'push_job_cancelled', label: 'Job Cancelled',      sub: 'If your job is cancelled' },
+  { key: 'push_early_start',   label: 'Early Start Requests', sub: 'When a contractor asks to start early' },
 ];
 const CUSTOMER_EMAIL = [
   { key: 'email_booking_confirmation', label: 'Booking Confirmation', sub: 'Confirmation your booking was received' },
@@ -64,6 +71,9 @@ const CONTRACTOR_PUSH = [
   { key: 'push_new_message',       label: 'New Messages',      sub: 'When you receive a chat message' },
   { key: 'push_booking_confirmed', label: 'Booking Confirmed', sub: 'When a job you accepted is confirmed' },
   { key: 'push_payment_received',  label: 'Payment Received',  sub: 'When a payout lands' },
+  { key: 'push_job_status',        label: 'Job Status Updates', sub: 'Quote expired and other job status changes' },
+  { key: 'push_job_cancelled',     label: 'Job Cancelled',     sub: 'If a customer cancels a booking' },
+  { key: 'push_early_start',       label: 'Early Start Responses', sub: "When a customer responds to your early start request" },
 ];
 const CONTRACTOR_EMAIL = [
   { key: 'email_new_message',   label: 'New Messages',        sub: 'When you receive a chat message' },
