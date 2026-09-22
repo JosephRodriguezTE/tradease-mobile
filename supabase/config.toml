@@ -72,11 +72,10 @@ verify_jwt = false
 [functions.work-order-dispute]
 verify_jwt = true
 
-# No auth check of any kind -- doesn't read the request at all. Proxies
-# GET https://api.stripe.com/v1/balance with STRIPE_SECRET_KEY and returns
-# livemode plus Stripe's own (redacted) error fields. Its own comment
-# calls it a temporary diagnostic meant to be deleted after use; it
-# wasn't. Currently callable by anyone with the URL, no credentials
-# required. Flagged in the audit as the most urgent finding of this pass.
+# Neutralized 2026-09-22: was an unauthenticated diagnostic proxying
+# STRIPE_SECRET_KEY and leaking livemode + Stripe error details to any
+# caller, no credentials required. Redeployed as an inert 410 stub with
+# verify_jwt: true. No delete-function tool was available to remove it
+# outright -- delete it for real via the dashboard when convenient.
 [functions.diag-stripe-mode]
-verify_jwt = false
+verify_jwt = true
