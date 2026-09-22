@@ -269,7 +269,7 @@ Include only the top ${TOP_N} by score.`
 
         const message = `${booking.trade ?? 'General'} job ${distStr} — ${match.score}% match. ${match.reason}`
 
-        const { data: notif, error: notifErr } = await supabase
+        const { error: notifErr } = await supabase
           .from('notifications')
           .insert({
             user_id: match.contractor_id,
@@ -287,28 +287,20 @@ Include only the top ${TOP_N} by score.`
               match_reason: match.reason,
             },
           })
-          .select('id')
-          .single()
 
         if (notifErr) {
           console.warn(`[match-job] Notification insert failed for ${match.contractor_id}:`, notifErr.message)
           return
         }
 
-        // Fire push notification
-        if (notif?.id && contractor.push_token) {
-          supabase.functions
-            .invoke('send-push-notification', {
-              body: {
-                notification_id: notif.id,
-                contractor_id: match.contractor_id,
-                push_token: contractor.push_token,
-                title: `New ${booking.trade ?? 'job'} match — ${match.score}%`,
-                body: message,
-              },
-            })
-            .catch(err => console.warn('[match-job] Push invoke failed:', err))
-        }
+        // Push to the contractor already happens -- inserting the row above
+        // fires trigger_send_push_notification on every notifications
+        // insert, unconditionally. This used to also call send-push-notification
+        // directly here, which would have sent a second push for the same
+        // match (this function has no live caller today -- no Database
+        // Webhook on bookings, no pg_net trigger, requires the raw
+        // service-role key -- but the double-push bug shouldn't survive in
+        // dead code waiting to bite again if this is ever reconnected).
 
         // Email (check prefs)
         const prefs = (contractor.notification_prefs ?? {}) as Record<string, unknown>
