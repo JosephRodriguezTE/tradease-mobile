@@ -1,0 +1,10 @@
+project_id = "linqsojbszglbgpoxgtv"
+
+# send-push-notification is invoked only by the on-notification-insert DB
+# trigger via net.http_post, which authenticates with a custom
+# x-tradease-internal header and never presents a JWT. verify_jwt must stay
+# false or the platform gateway rejects the trigger's call before it ever
+# reaches the function's own internal-secret check -- this already
+# regressed once when a redeploy defaulted it back to true.
+[functions.send-push-notification]
+verify_jwt = false
