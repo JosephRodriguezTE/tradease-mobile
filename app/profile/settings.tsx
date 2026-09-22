@@ -9,7 +9,7 @@ import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -142,8 +142,45 @@ export default function SettingsScreen() {
 
   const [signingOut,   setSigningOut]    = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [pendingDeletion, setPendingDeletion] = useState<{ id: string; scheduled_delete_at: string } | null>(null);
 
   const modeLabel = mode === 'system' ? 'System' : isDark ? 'Dark' : 'Light';
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('account_deletion_requests')
+        .select('id, scheduled_delete_at')
+        .eq('user_id', user.id)
+        .eq('status', 'pending')
+        .maybeSingle();
+      setPendingDeletion(data ?? null);
+    })();
+  }, []);
+
+  function handleCancelDeletion() {
+    if (!pendingDeletion) return;
+    Alert.alert(
+      'Cancel Deletion Request',
+      'Your account will no longer be scheduled for deletion.',
+      [
+        { text: "Don't Cancel", style: 'cancel' },
+        { text: 'Cancel Deletion', style: 'destructive', onPress: async () => {
+          const { error } = await supabase
+            .from('account_deletion_requests')
+            .update({ status: 'cancelled' })
+            .eq('id', pendingDeletion.id);
+          if (error) {
+            Alert.alert('Error', "Couldn't cancel your deletion request. Please try again.");
+            return;
+          }
+          setPendingDeletion(null);
+        }},
+      ],
+    );
+  }
 
   async function handleSignOut() {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -226,8 +263,10 @@ export default function SettingsScreen() {
   ];
 
   const dangerRows: RowItem[] = [
-    { id:'signout', icon:'log-out-outline', iconColor:C.error, label:'Sign Out',       destructive:true, onPress:handleSignOut },
-    { id:'delete',  icon:'trash-outline',   iconColor:C.error, label:'Delete Account', destructive:true, onPress:handleDeleteAccount },
+    { id:'signout', icon:'log-out-outline', iconColor:C.error, label:'Sign Out', destructive:true, onPress:handleSignOut },
+    pendingDeletion
+      ? { id:'cancel-delete', icon:'close-circle-outline', iconColor:C.error, label:'Cancel Deletion Request', destructive:true, onPress:handleCancelDeletion }
+      : { id:'delete', icon:'trash-outline', iconColor:C.error, label:'Delete Account', destructive:true, onPress:handleDeleteAccount },
   ];
 
   return (

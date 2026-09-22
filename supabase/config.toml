@@ -79,3 +79,9 @@ verify_jwt = true
 # outright -- delete it for real via the dashboard when convenient.
 [functions.diag-stripe-mode]
 verify_jwt = true
+
+# Internal-only: x-tradease-internal. Its only caller is
+# sweep_account_deletions() (pg_cron, hourly) via net.http_post, one call
+# per eligible account_deletion_requests row.
+[functions.process-account-deletions]
+verify_jwt = false
