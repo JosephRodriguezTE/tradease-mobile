@@ -29,8 +29,6 @@ const { width } = Dimensions.get('window');
 // Bump this when the Terms of Service / Privacy Policy text changes.
 const CURRENT_TOS_VERSION = '2026-08-21';
 
-const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
 // ─── FOCUS INPUT ────────────────────────────────────────
 function FocusInput({
   label, value, onChangeText, placeholder, secureTextEntry,
@@ -67,46 +65,6 @@ function FocusInput({
         {rightElement && <View style={inputStyles.right}>{rightElement}</View>}
       </Animated.View>
       {hint && <Text style={inputStyles.hint}>{hint}</Text>}
-    </View>
-  );
-}
-
-// ─── MONTH/YEAR PICKER ──────────────────────────────────
-function MonthYearPicker({
-  month, year, onSelect,
-}: {
-  month: number; year: number;
-  onSelect: (m: number, y: number) => void;
-}) {
-  const now = new Date();
-  const [displayYear, setDisplayYear] = useState(year || now.getFullYear());
-
-  return (
-    <View style={pickerStyles.box}>
-      <View style={pickerStyles.yearRow}>
-        <TouchableOpacity onPress={() => setDisplayYear(y => y - 1)} style={pickerStyles.yearBtn}>
-          <Text style={pickerStyles.yearArrow}>‹</Text>
-        </TouchableOpacity>
-        <Text style={pickerStyles.yearText}>{displayYear}</Text>
-        <TouchableOpacity onPress={() => setDisplayYear(y => y + 1)} style={pickerStyles.yearBtn}>
-          <Text style={pickerStyles.yearArrow}>›</Text>
-        </TouchableOpacity>
-      </View>
-      <View style={pickerStyles.monthGrid}>
-        {MONTHS.map((m, i) => {
-          const isSelected = i + 1 === month && displayYear === year;
-          const isPast = new Date(displayYear, i) < new Date(now.getFullYear(), now.getMonth());
-          return (
-            <TouchableOpacity
-              key={m}
-              onPress={() => !isPast && onSelect(i + 1, displayYear)}
-              style={[pickerStyles.monthBtn, isSelected && pickerStyles.monthBtnActive, isPast && pickerStyles.monthBtnPast]}
-            >
-              <Text style={[pickerStyles.monthText, isSelected && pickerStyles.monthTextActive]}>{m}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
     </View>
   );
 }
@@ -180,14 +138,11 @@ export default function SignupScreen() {
   // Contractor
   const [phone, setPhone] = useState('');
   const [businessName, setBusinessName] = useState('');
-  const [tradeCategory, setTradeCategory] = useState('');
+  // Insertion order is the selection order -- selectedTrades[0] is always
+  // the first trade tapped, which is what gets sent as p_primary_trade_id.
+  const [selectedTrades, setSelectedTrades] = useState<string[]>([]);
   const [businessAddress, setBusinessAddress] = useState('');
   const [serviceArea, setServiceArea] = useState('');
-  const [licenseNumber, setLicenseNumber] = useState('');
-  const [expiryMonth, setExpiryMonth] = useState(0);
-  const [expiryYear, setExpiryYear] = useState(0);
-  const [showExpiryPicker, setShowExpiryPicker] = useState(false);
-  const [licenseCounty, setLicenseCounty] = useState('');
 
   // Customer
   const [publicLocation, setPublicLocation] = useState(false);
@@ -263,7 +218,7 @@ export default function SignupScreen() {
     if (role === 'contractor') {
       if (!phone.trim()) return Alert.alert('Required', 'Phone number is required for contractors.');
       if (!businessName.trim()) return Alert.alert('Required', 'Business name is required.');
-      if (!tradeCategory) return Alert.alert('Required', 'Please select a trade category.');
+      if (selectedTrades.length === 0) return Alert.alert('Required', 'Please select at least one trade category.');
     }
 
     if (!agreed) return Alert.alert('Terms', 'Please agree to the Terms of Service.');
@@ -310,9 +265,6 @@ export default function SignupScreen() {
         });
         if (insErr) console.log('users insert error:', insErr);
       } else {
-        const licenseExpirationDate = expiryMonth > 0
-          ? `${expiryYear}-${String(expiryMonth).padStart(2, '0')}-01`
-          : null;
         const { error: insErr } = await supabase.from('contractors').insert({
           id: userId,
           email: email.trim().toLowerCase(),
@@ -324,13 +276,15 @@ export default function SignupScreen() {
           // written directly, so a failed trade save below is honestly
           // reflected instead of showing a trade_type with no matching
           // contractor_trades row behind it.
+          //
+          // license_number/license_expiration/license_county are no longer
+          // collected here either — get-verified.tsx (the real verification
+          // flow, skippable) writes to contractor_verification, a separate
+          // table nothing here ever fed. These columns stay in the schema
+          // for now; signup just stops writing to them.
           phone: phone.trim(),
           address: businessAddress.trim() || null,
           service_area: serviceArea.trim() || null,
-          license_number: licenseNumber.trim() || null,
-          license_expiration: licenseExpirationDate,
-          license_county: licenseCounty.trim() || null,
-          license_verified: !!licenseNumber.trim(),
           allow_notifications: allowNotifications,
           allow_motion: allowMotion,
           allow_media: allowMedia,
@@ -354,13 +308,13 @@ export default function SignupScreen() {
           // logged, and contractors_missing_trades (the admin backstop)
           // catches it if they never revisit it.
           let { error: tradeErr } = await supabase.rpc('save_contractor_trades', {
-            p_trade_ids: [tradeCategory],
-            p_primary_trade_id: tradeCategory,
+            p_trade_ids: selectedTrades,
+            p_primary_trade_id: selectedTrades[0],
           });
           if (tradeErr) {
             ({ error: tradeErr } = await supabase.rpc('save_contractor_trades', {
-              p_trade_ids: [tradeCategory],
-              p_primary_trade_id: tradeCategory,
+              p_trade_ids: selectedTrades,
+              p_primary_trade_id: selectedTrades[0],
             }));
           }
           if (tradeErr) {
@@ -400,7 +354,7 @@ export default function SignupScreen() {
     (googleMode || password.length >= 8) &&
     (googleMode || password === confirmPassword) &&
     businessName.trim().length > 1 &&
-    tradeCategory.length > 0 &&
+    selectedTrades.length > 0 &&
     agreed;
 
   // Mirrors canCreateContractor's conditions one-to-one, so the disabled button
@@ -413,7 +367,7 @@ export default function SignupScreen() {
     if (!googleMode && password.length < 8) missingContractorFields.push('a password (8+ characters)');
     if (!googleMode && password !== confirmPassword) missingContractorFields.push('matching passwords');
     if (!(businessName.trim().length > 1)) missingContractorFields.push('business name');
-    if (!(tradeCategory.length > 0)) missingContractorFields.push('a trade category');
+    if (!(selectedTrades.length > 0)) missingContractorFields.push('at least one trade category');
     if (!agreed) missingContractorFields.push('agreeing to the Terms of Service');
   }
 
@@ -586,25 +540,34 @@ export default function SignupScreen() {
                     <Text style={inputStyles.label}>
                       Trade Category<Text style={inputStyles.req}> *</Text>
                     </Text>
+                    <Text style={styles.tradeHint}>
+                      Select every trade you work in — the first one you tap is your primary trade.
+                    </Text>
                     <ScrollView
                       horizontal
                       showsHorizontalScrollIndicator={false}
                       contentContainerStyle={styles.tradesRow}
                       style={{ marginTop: 4 }}
                     >
-                      {ALL_TRADES.map((trade) => (
-                        <TouchableOpacity
-                          key={trade}
-                          style={[styles.tradeChip, tradeCategory === trade && styles.tradeChipActive]}
-                          onPress={() => setTradeCategory(trade)}
-                          activeOpacity={0.85}
-                        >
-                          <Text style={styles.tradeChipIcon}>{TRADE_ICONS[trade]}</Text>
-                          <Text style={[styles.tradeChipText, tradeCategory === trade && styles.tradeChipTextActive]}>
-                            {trade}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
+                      {ALL_TRADES.map((trade) => {
+                        const active = selectedTrades.includes(trade);
+                        const isPrimary = active && selectedTrades[0] === trade;
+                        return (
+                          <TouchableOpacity
+                            key={trade}
+                            style={[styles.tradeChip, active && styles.tradeChipActive]}
+                            onPress={() => setSelectedTrades(prev =>
+                              prev.includes(trade) ? prev.filter(t => t !== trade) : [...prev, trade]
+                            )}
+                            activeOpacity={0.85}
+                          >
+                            <Text style={styles.tradeChipIcon}>{TRADE_ICONS[trade]}</Text>
+                            <Text style={[styles.tradeChipText, active && styles.tradeChipTextActive]}>
+                              {trade}{isPrimary ? ' ★' : ''}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
                     </ScrollView>
                   </View>
                 </View>
@@ -625,49 +588,6 @@ export default function SignupScreen() {
                     placeholder="e.g. Brooklyn, Queens, Manhattan"
                     autoCapitalize="words"
                     hint="Areas you cover for jobs"
-                  />
-                </View>
-
-                <Text style={styles.sectionLabel}>LICENSE INFO · OPTIONAL</Text>
-                <View style={styles.licenseNotice}>
-                  <Ionicons name="ribbon-outline" size={16} color={OC.iconMuted} />
-                  <Text style={styles.licenseNoticeText}>
-                    If your trade requires a license in your state/county, add it here for verification. Skip if not applicable.
-                  </Text>
-                </View>
-                <View style={styles.section}>
-                  <FocusInput
-                    label="License Number"
-                    value={licenseNumber}
-                    onChangeText={setLicenseNumber}
-                    placeholder="Enter it exactly as issued"
-                    hint="No need to reformat it — dashes or spaces are fine either way"
-                  />
-                  <View style={inputStyles.wrap}>
-                    <Text style={inputStyles.label}>Expiration Date</Text>
-                    <TouchableOpacity
-                      style={[inputStyles.box, { borderColor: expiryMonth > 0 ? Colors.orange : 'rgba(255,255,255,0.08)', marginBottom: showExpiryPicker ? 8 : 0 }]}
-                      onPress={() => setShowExpiryPicker(v => !v)}
-                    >
-                      <Text style={[inputStyles.input, { paddingVertical: OS.none, color: expiryMonth > 0 ? Colors.white : OC.placeholder }]}>
-                        {expiryMonth > 0 ? `${MONTHS[expiryMonth - 1]} ${expiryYear}` : 'Select expiry date'}
-                      </Text>
-                      <Ionicons name="calendar-outline" size={16} color={OC.iconMuted} />
-                    </TouchableOpacity>
-                    {showExpiryPicker && (
-                      <MonthYearPicker
-                        month={expiryMonth}
-                        year={expiryYear}
-                        onSelect={(m, y) => { setExpiryMonth(m); setExpiryYear(y); setShowExpiryPicker(false); }}
-                      />
-                    )}
-                  </View>
-                  <FocusInput
-                    label="County Issued"
-                    value={licenseCounty}
-                    onChangeText={setLicenseCounty}
-                    placeholder="e.g. Suffolk County"
-                    autoCapitalize="words"
                   />
                 </View>
               </>
@@ -892,6 +812,7 @@ const styles = StyleSheet.create({
   },
   divider: { height: 1, backgroundColor: OC.borderSubtle, marginHorizontal: 16 },
 
+  tradeHint: { ...OT.bodyText, color: OC.iconMuted, paddingHorizontal: OS.lgXl, marginTop: 2 },
   tradesRow: { gap: 8, paddingVertical: OS.xxs, paddingHorizontal: OS.lgXl },
   tradeChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -903,18 +824,6 @@ const styles = StyleSheet.create({
   tradeChipIcon: OT.chipIcon,
   tradeChipText: { ...OT.chipText, color: OC.iconMuted },
   tradeChipTextActive: { color: Colors.orange },
-
-  licenseNotice: {
-    flexDirection: 'row', gap: 10,
-    backgroundColor: 'rgba(245,158,11,0.06)',
-    borderRadius: 12, borderWidth: 1, borderColor: 'rgba(245,158,11,0.2)',
-    padding: OS.mdLg,
-  },
-  licenseNoticeIcon: OT.iconMd,
-  licenseNoticeText: {
-    flex: 1, ...OT.bodyText,
-    color: OC.warning, lineHeight: 17,
-  },
 
   eye: OT.iconMd,
 
@@ -977,29 +886,6 @@ const inputStyles = StyleSheet.create({
   inputDisabled: { color: OC.iconMuted },
   right: { paddingLeft: OS.md },
   hint: { ...OT.fieldHint, color: OC.textMuted },
-});
-
-const pickerStyles = StyleSheet.create({
-  box: {
-    backgroundColor: OC.inputBg, borderRadius: 12, borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.08)', padding: OS.lg, marginTop: -2, marginBottom: 6,
-  },
-  yearRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 12, paddingHorizontal: OS.xxs,
-  },
-  yearBtn: { padding: OS.sm },
-  yearArrow: { ...OT.pickerArrow, color: Colors.white },
-  yearText: { ...OT.pickerYear, color: Colors.white },
-  monthGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  monthBtn: {
-    width: '30%', paddingVertical: OS.mdLg, borderRadius: 10, alignItems: 'center',
-    backgroundColor: OC.pickerCellBg, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-  },
-  monthBtnActive: { backgroundColor: Colors.orange, borderColor: Colors.orange },
-  monthBtnPast: { opacity: 0.3 },
-  monthText: { ...OT.pickerMonth, color: Colors.white },
-  monthTextActive: { color: OC.bg },
 });
 
 const toggleStyles = StyleSheet.create({
