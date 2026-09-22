@@ -1,10 +1,82 @@
 project_id = "linqsojbszglbgpoxgtv"
 
-# send-push-notification is invoked only by the on-notification-insert DB
-# trigger via net.http_post, which authenticates with a custom
-# x-tradease-internal header and never presents a JWT. verify_jwt must stay
-# false or the platform gateway rejects the trigger's call before it ever
-# reaches the function's own internal-secret check -- this already
-# regressed once when a redeploy defaulted it back to true.
+# Every deployed function's verify_jwt, pinned at its current live value so
+# a future redeploy via the deploy tool (whose own default is true) can't
+# silently flip it -- exactly what happened to send-push-notification
+# before it was pinned. Values below are a snapshot of what's actually
+# live today (audited 2026-09-22), not a statement that each is correct --
+# see that audit for which of the false-verify_jwt functions have their
+# own internal auth and which don't.
+
+[functions.smart-endpoint]
+verify_jwt = true
+
+# Invoked only by the on-notification-insert DB trigger via net.http_post,
+# which authenticates with a custom x-tradease-internal header and never
+# presents a JWT. Must stay false or the platform gateway rejects the
+# trigger's call before it ever reaches the function's own internal-secret
+# check -- this already regressed once when a redeploy defaulted it back
+# to true.
 [functions.send-push-notification]
+verify_jwt = false
+
+# Own JWT check inside the function body (Authorization header ->
+# auth.getUser()), plus a contractor-ownership + PIN check for mutations.
+# No caller anywhere in either repo today -- see the audit for why this is
+# flagged as orphaned, not just false.
+[functions.manage-employee]
+verify_jwt = false
+
+# Internal-only: x-tradease-internal, checked via isValidInternalSecret().
+# Called by Postgres functions (send_email(), charge-customer) and by
+# several website call sites that do NOT attach the header -- see the
+# audit for the resulting silent-401 bug.
+[functions.send-email]
+verify_jwt = false
+
+# Internal-secret OR user-JWT-plus-ownership (callerId must equal the work
+# order's customer_id). A client can call this, but only to charge a work
+# order they themselves are the customer on.
+[functions.charge-customer]
+verify_jwt = false
+
+# Requires Authorization: Bearer <SERVICE_ROLE_KEY> literally. Confirmed
+# dead: no Database Webhook on bookings (supabase_functions.hooks is
+# empty for that table), no pg_net trigger in any migration, and no
+# client could supply the raw service-role key anyway.
+[functions.match-job]
+verify_jwt = false
+
+[functions.agent-job-match]
+verify_jwt = true
+
+[functions.match-and-rank]
+verify_jwt = true
+
+# Internal-only: x-tradease-internal. Comment in the function documents
+# this was previously wide open under verify_jwt: true (any valid JWT,
+# including anon, could trigger a real Anthropic API call) before this
+# check was added.
+[functions.on-booking-created]
+verify_jwt = false
+
+[functions.work-order-transition]
+verify_jwt = true
+
+# Internal-only: x-tradease-internal. Called by
+# trigger_send_launch_confirmation() (AFTER INSERT on launch_signups) via
+# net.http_post.
+[functions.send-launch-confirmation]
+verify_jwt = false
+
+[functions.work-order-dispute]
+verify_jwt = true
+
+# No auth check of any kind -- doesn't read the request at all. Proxies
+# GET https://api.stripe.com/v1/balance with STRIPE_SECRET_KEY and returns
+# livemode plus Stripe's own (redacted) error fields. Its own comment
+# calls it a temporary diagnostic meant to be deleted after use; it
+# wasn't. Currently callable by anyone with the URL, no credentials
+# required. Flagged in the audit as the most urgent finding of this pass.
+[functions.diag-stripe-mode]
 verify_jwt = false
