@@ -84,7 +84,7 @@ export default function IndexScreen() {
           { opacity: fadeAnim, transform: [{ scale: pulseAnim }] },
         ]}
       >
-        <TradeaseLogo layout="column" iconSize={80} fontSize={32} gap={-6} showCopyright />
+        <TradeaseLogo layout="column" iconSize={80} fontSize={32} gap={4} showCopyright />
       </Animated.View>
     </View>
   );
