@@ -1966,7 +1966,7 @@ export default function ContractorWorkOrderScreen() {
             <Text style={s.paydayEmoji}>🎉</Text>
             <Text style={s.paydayTitle}>Job Complete!</Text>
             <Text style={s.paydayAmt}>${(paydayCents / 100).toFixed(2)}</Text>
-            <Text style={s.paydaySub}>Payment released to your account</Text>
+            <Text style={s.paydaySub}>Payment capture isn't live yet</Text>
             <TouchableOpacity
               style={s.paydayBtn}
               onPress={() => { setShowPayday(false); router.replace('/(tabs)'); }}

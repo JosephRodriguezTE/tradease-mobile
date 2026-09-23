@@ -235,8 +235,8 @@ function LearnMoreSheet({ visible, onClose }: { visible: boolean; onClose: () =>
         {([
           { icon: '🔒', head: 'Held on your card', body: 'When you book, we place a hold on your card — not a charge. Your money doesn\'t move until you say so.' },
           { icon: '🔧', head: 'Contractor works, you watch', body: 'Your contractor works and marks the job complete. Only then are you asked to review and approve.' },
-          { icon: '✅', head: 'You approve, then we release', body: 'When you tap "Approve & Pay," funds are released to the contractor. If you have concerns, open a dispute instead.' },
-          { icon: '⚖️', head: '72-hour dispute window', body: 'Changed your mind? You have 72 hours after the job is marked complete to open a dispute before funds auto-release.' },
+          { icon: '✅', head: 'You approve, then we release', body: 'When you tap "Approve," the job is marked complete. Payment capture isn\'t live yet — if you have concerns, open a dispute instead.' },
+          { icon: '⚖️', head: '72-hour dispute window', body: 'Changed your mind? You have 72 hours after the job is marked complete to open a dispute.' },
         ] as const).map(item => (
           <View key={item.head} style={lm.row}>
             <Text style={lm.rowIcon}>{item.icon}</Text>
@@ -351,7 +351,7 @@ function HeroSection({ wo, eta, onLearnMore, heldCents, hasHold, isMockPayment, 
               {isApproval
                 ? 'Ready to release — pending your approval below'
                 : wo.wo_status === 'completed'
-                  ? 'Released to contractor'
+                  ? "Payment capture isn't live yet"
                   : 'Held securely — releases only when you approve'}
             </Text>
           </View>
@@ -913,16 +913,7 @@ function CompletionSheet({
       });
       if (reviewErr) throw reviewErr;
 
-      // 2. Capture payment (mock) — stores both grand total and tip for receipt
-      if (pi) {
-        const { error: piErr } = await supabase.from('payment_intents').update({
-          status: 'captured', captured_at: new Date().toISOString(),
-          amount_cents: grandTotal, tip_cents: tipCents,
-        }).eq('id', pi.id);
-        if (piErr) throw piErr;
-      }
-
-      // 3. Transition to completed — payment_releasing first (sets approved_at),
+      // 2. Transition to completed — payment_releasing first (sets approved_at),
       // then completed, matching the valid state graph.
       const { error: releasingErr } = await supabase.functions.invoke('work-order-transition', {
         body: { work_order_id: wo.id, new_status: 'payment_releasing' },
@@ -947,7 +938,7 @@ function CompletionSheet({
         {phase === 'processing' && (
           <View style={cs.centeredWrap}>
             <HammerLoader size={64} />
-            <Text style={cs.processingTxt}>Processing payment…</Text>
+            <Text style={cs.processingTxt}>Processing approval…</Text>
           </View>
         )}
 
@@ -958,8 +949,8 @@ function CompletionSheet({
                 <Ionicons name="checkmark" size={52} color="#fff" />
               </View>
             </Animated.View>
-            <Text style={cs.successTitle}>Payment Approved!</Text>
-            <Text style={cs.successSub}>{fmt$(grandTotal)} released to {wo.contractor_name}</Text>
+            <Text style={cs.successTitle}>Work Approved!</Text>
+            <Text style={cs.successSub}>Payment capture isn't live yet — {wo.contractor_name} has been notified</Text>
             {stars > 0 && (
               <Text style={[cs.successSub, { marginTop: 4 }]}>
                 {'⭐'.repeat(stars)} — thanks for the review!
@@ -1083,15 +1074,15 @@ function CompletionSheet({
               onPress={handleApprove}
               activeOpacity={0.85}
               accessibilityRole="button"
-              accessibilityLabel={`Approve and pay ${fmt$(grandTotal)}`}
-              accessibilityHint="Releases payment to contractor and completes the job"
+              accessibilityLabel="Approve completed work"
+              accessibilityHint="Marks the job complete. Payment capture isn't live yet."
             >
               <Ionicons name="shield-checkmark" size={20} color="#fff" />
-              <Text style={cs.approveBtnTxt}>Approve & Pay {fmt$(grandTotal)}</Text>
+              <Text style={cs.approveBtnTxt}>Approve Work</Text>
             </TouchableOpacity>
 
             <Text style={[s.billMeta, { textAlign: 'center', marginTop: 14, paddingBottom: 16 }]}>
-              By approving, you release payment to the contractor. This cannot be undone.
+              By approving, you confirm the job is complete. Payment capture isn't live yet. This cannot be undone.
             </Text>
           </ScrollView>
         )}
