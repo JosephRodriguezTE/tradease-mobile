@@ -53,7 +53,7 @@ const STATUS_CONFIG: Record<string, { color: string; label: string; icon: string
   confirmed:   { color: '#22C55E', label: 'Confirmed',          icon: '✅' },
   in_progress: { color: '#38BDF8', label: 'In Progress',        icon: '🔧' },
   completed:   { color: '#9CA3AF', label: 'Completed',          icon: '☑️' },
-  approved:    { color: '#A78BFA', label: 'Payment Approved',   icon: '💳' },
+  approved:    { color: '#A78BFA', label: 'Work Approved',      icon: '💳' },
   paid:        { color: '#22C55E', label: 'Paid',               icon: '💰' },
   cancelled:   { color: '#EF4444', label: 'Cancelled',          icon: '❌' },
   declined:    { color: '#EF4444', label: 'Declined',           icon: '❌' },

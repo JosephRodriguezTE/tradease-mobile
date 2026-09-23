@@ -120,8 +120,8 @@ function statusText(status: WoStatus, contractorName: string, eta?: string | nul
     case 'materials_needed':     return `${name} stepped out to grab materials and will be right back.`;
     case 'change_order_pending': return `${name} is requesting additional work. Review below.`;
     case 'awaiting_approval':    return `${name} says the job is done. Please review and approve.`;
-    case 'payment_releasing':    return 'Payment is being released to the contractor.';
-    case 'completed':            return 'Job complete. Your payment has been processed. ✅';
+    case 'payment_releasing':    return "You approved the job. Payment capture isn't live yet.";
+    case 'completed':            return "Job complete. Payment capture isn't live yet. ✅";
     case 'cancelled':            return 'This job was cancelled.';
     case 'disputed':             return 'This job is under dispute. Our team is reviewing.';
     default:                     return `${name} is working on your job.`;
