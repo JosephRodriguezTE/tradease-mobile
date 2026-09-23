@@ -1070,10 +1070,10 @@ function SupportSection({ wo, collapsed, onToggle }: { wo: WoData; collapsed: bo
 // ─── Change Order Modal ───────────────────────────────────────────────────────
 
 function ChangeOrderModal({
-  visible, woId, autoApproveUnder, contractorId, onClose, onSubmitted,
+  visible, bookingId, paymentIntentId, autoApproveUnder, contractorId, onClose, onSubmitted,
 }: {
-  visible: boolean; woId: string; autoApproveUnder: number;
-  contractorId: string; onClose: () => void; onSubmitted: () => void;
+  visible: boolean; bookingId: string; paymentIntentId: string | null;
+  autoApproveUnder: number; contractorId: string; onClose: () => void; onSubmitted: () => void;
 }) {
   const [desc, setDesc]     = useState('');
   const [itemType, setType] = useState<string>('labor');
@@ -1089,17 +1089,22 @@ function ChangeOrderModal({
   async function submit() {
     if (!desc.trim()) { Alert.alert('', 'Describe the additional work.'); return; }
     if (totalCents <= 0) { Alert.alert('', 'Enter the unit price.'); return; }
+    if (!paymentIntentId) {
+      Alert.alert('', "This job doesn't have a payment on file yet, so a change order can't be submitted. Contact support.");
+      return;
+    }
     setSaving(true);
     const { error } = await supabase.from('payment_line_items').insert({
-      work_order_id:    woId,
-      label:            desc.trim(),
-      quantity:         parseFloat(qty) || 1,
-      unit_price_cents: Math.round((parseFloat(price) || 0) * 100),
-      amount_cents:     totalCents,
-      item_type:        itemType,
+      payment_intent_id: paymentIntentId,
+      booking_id:        bookingId,
+      label:             desc.trim(),
+      description:       desc.trim(),
+      quantity:          parseFloat(qty) || 1,
+      unit_price_cents:  Math.round((parseFloat(price) || 0) * 100),
+      amount_cents:      totalCents,
+      item_type:         itemType,
       requires_approval: !willAutoApprove,
-      approval_status:  willAutoApprove ? 'auto_approved' : 'pending',
-      added_by:         contractorId,
+      added_by:          contractorId,
     });
     setSaving(false);
     if (error) { Alert.alert('Error', error.message); return; }
@@ -1945,7 +1950,8 @@ export default function ContractorWorkOrderScreen() {
       {/* ── Change Order Modal ─────────────────────────────────────────────── */}
       <ChangeOrderModal
         visible={showCO}
-        woId={wo.id}
+        bookingId={wo.booking_id}
+        paymentIntentId={wo.payment_intent_id}
         autoApproveUnder={wo.auto_approve_under_cents}
         contractorId={wo.contractor_id}
         onClose={() => setShowCO(false)}
