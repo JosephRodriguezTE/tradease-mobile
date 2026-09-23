@@ -922,7 +922,13 @@ function CompletionSheet({
         if (piErr) throw piErr;
       }
 
-      // 3. Transition to completed
+      // 3. Transition to completed — payment_releasing first (sets approved_at),
+      // then completed, matching the valid state graph.
+      const { error: releasingErr } = await supabase.functions.invoke('work-order-transition', {
+        body: { work_order_id: wo.id, new_status: 'payment_releasing' },
+      });
+      if (releasingErr) throw releasingErr;
+
       const { error } = await supabase.functions.invoke('work-order-transition', {
         body: { work_order_id: wo.id, new_status: 'completed' },
       });
