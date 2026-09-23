@@ -76,3 +76,146 @@ fixed?), not an engineering one. Whichever it is, the other two call sites
 should be removed in the same change, not scheduled separately — a second
 fake-capture path left running is exactly how this gap was invisible for
 this long.
+
+## Update — 2026-09-23: fake capture removed, charge-customer repaired, website hold deliberately deferred
+
+Half of the above is now done: **the fake-capture write is gone from both
+app paths.** Neither `handleApprove()` (mobile) nor `approveWorkOrder()`
+(website) touches `payment_intents` anymore — the product decision of
+*which* path becomes the real one is still open, but "don't fake it" no
+longer waits on that decision.
+
+- Both still do the two `work_orders` status writes (`payment_releasing` →
+  `completed`) unchanged, since those drive `work_order_events`,
+  notifications, and `approved_at`. Nothing writes `payment_intents.status`
+  or `captured_at` from either app anymore.
+- Deliberate consequence: for any work order with a `payment_intent_id`
+  linked to a row not already `'captured'` (the common case),
+  `validate_work_order_transition()`'s existing money check now rejects the
+  `completed` write for real, surfacing an actual error instead of a fake
+  success. The work order rests at `payment_releasing` until
+  `charge-customer` is reachable — exactly the "an error would be better
+  than silently faking success" position fact 3 already argued for.
+- Every user-facing string on both platforms that claimed money moved or
+  was protected — approve buttons, toasts, push/email copy, terminal status
+  banners, hero/status cards, badge labels — was reworded to say plainly
+  that payment capture isn't live yet. Full diffs are in the commit history
+  for this date range, both repos; nothing is summarized further here.
+- Found during this pass, fixed the same way: a **third**, independent
+  approve surface, `app/dashboard/customer/jobs/[id]/ApproveJobSection.tsx`
+  + `notifyContractorWorkApproved()` (website) — writes `bookings.status =
+  'approved'` directly, with no relationship to `work_orders` at all. Same
+  false-claim copy, same fix. Still writes `bookings.status` as before; see
+  "three bookings.status writers" below — this was not consolidated into
+  the `work_orders` flow.
+
+**`charge-customer` (path 3, the only real one) was repaired, but remains
+completely unwired — nothing in either app calls it.** This pass only
+fixed its own internal correctness, so it's honest and safe *once*
+something does call it:
+- Status gate now checks `status = 'payment_releasing'` directly, agreeing
+  with `mark_work_order_paid`'s own `WHERE` clause. The old gate (`status
+  IN ('approved','completed')`, `=== 'paid'`) checked against
+  `work_order_status` enum values that can never occur — it silently only
+  ever let `'completed'` through, which never matched
+  `mark_work_order_paid`'s `WHERE status = 'payment_releasing'` at all.
+  Even with Stripe fully wired, the old code could never have completed a
+  real charge.
+- `mark_work_order_paid()` (migration `20260923020000`) now uses `GET
+  DIAGNOSTICS` to check its own affected-row count and raises on zero
+  instead of silently no-op'ing. `charge-customer` now actually checks that
+  RPC's error at both call sites instead of discarding it.
+- Added a Stripe `Idempotency-Key` header (`charge-customer:<work_order_id>`)
+  on the PaymentIntent create call.
+- Added an atomic claim (`UPDATE work_orders SET stripe_payment_intent_id =
+  <marker> WHERE status='payment_releasing' AND stripe_payment_intent_id IS
+  NULL`) before the Stripe call, so two concurrent calls can't both create a
+  PaymentIntent for the same work order; released back to `NULL` on any
+  failure after claiming, so a genuine error doesn't permanently strand a
+  work order at `claim:...`.
+- Applied the previously-flagged "Fix 4": JWT validation now extracts the
+  bearer token from the `Authorization` header and calls `getUser(token)`
+  explicitly, instead of relying on ambient client session state a
+  freshly-constructed client never has.
+- Proved every change above without ever calling Stripe: a DB dry run
+  against a real fixture (the status gate, the atomic claim winning/losing,
+  `mark_work_order_paid`'s new zero-row failure), plus 15 Deno unit tests
+  (`supabase/functions/charge-customer/logic.test.ts`, pure logic extracted
+  into `logic.ts` so importing it doesn't trigger `Deno.serve()`) with
+  `fetch` stubbed to hard-fail on any target that isn't the Stripe mock.
+
+**Website payment hold: considered, deliberately not built.** The
+website's customer work-order screen has no way to secure a payment hold —
+mobile's `securePayment()` / `MockPaymentProvider` (`lib/payment/mock.ts`,
+the only `PaymentProvider` implementation that exists) has no website
+equivalent. Weighed building a website mock-hold UI — it would let a
+DB-level `in_progress` payment gate (mirroring mobile's
+`work-order-transition` check into `validate_work_order_transition()`) be
+added safely for both platforms — against just being honest that it isn't
+available. Chose honesty: the mock-hold UI is not reusable once real Stripe
+card collection replaces it, and pre-launch, mock money securing nothing
+doesn't protect anyone regardless of which platform reaches it. Building it
+twice (mock now, Stripe later) for a feature whose only payoff is a DB gate
+that doesn't guard anything real yet wasn't worth it. Landed instead:
+- Website customer work-order screen (`CustomerWorkOrderClient.tsx`) shows
+  a small card stating plainly that payment security isn't available on
+  web yet, pointing to the app — or, if a real hold already exists
+  (secured via the app), shows that truthfully instead.
+- Website contractor work-order screen (`ContractorWorkOrderClient.tsx`)
+  tells the contractor, when the next step is starting work with no held
+  payment intent, that no payment hold is on file. Informational only —
+  does not block starting work.
+- The DB-level `in_progress` payment gate itself was **not added**. It
+  remains mobile-app-level only, inside `work-order-transition`, exactly as
+  it was before this pass.
+
+### Remaining prerequisites (unchanged by this pass)
+
+`charge-customer` cannot process a single real charge, repaired or not,
+until all three of these exist — none of them do today:
+- **Stripe Connect onboarding.** Nothing in either repo writes
+  `contractors.stripe_account_id`. No onboarding flow exists anywhere.
+- **Card collection.** Nothing in either repo writes
+  `users.stripe_customer_id` / `stripe_payment_method_id`. No card-
+  collection UI exists — mobile's `profile/payments.tsx` already says
+  "Stripe payments coming soon" and disables its Add Card button, correctly.
+- **A webhook receiver.** There is none in either repo.
+  `charge-customer` creates PaymentIntents synchronously and only ever
+  reads back its own writes; nothing catches async Stripe events
+  (disputes, delayed captures, 3DS follow-up) if this goes live as-is.
+
+### Open decisions, not made in this pass
+
+1. **The `ensureWorkOrder()` placeholder collision — confirmed real.**
+   Verified live against the schema: `payment_intents.status` defaults to
+   `'pending_hold'::payment_intent_status`. Both `ensureWorkOrder()`
+   (`app/dashboard/customer/jobs/[id]/work-order/actions.ts`) and its twin
+   auto-create path in `app/dashboard/contractor/jobs/[id]/work-order/page.tsx`
+   insert a `payment_intents` row with `amount_cents: 0` and no explicit
+   `status`, then immediately point `work_orders.payment_intent_id` at it.
+   **Every website-created work order has a non-null `payment_intent_id`
+   from the moment it exists, referencing a `pending_hold` row that never
+   advances.** Any future code — gates, UI, anything checking "is payment
+   secured" — must check the linked row's `status`, never just whether
+   `payment_intent_id` is non-null; presence alone means nothing here.
+   `lib/work-order.ts`'s `hasRealPaymentHold()` (added this pass, backs the
+   two honest-copy cards above) already does this correctly and is the
+   reference implementation. Not decided: whether a future real hold action
+   updates this placeholder row in place, or inserts a fresh row and
+   re-points `payment_intent_id`, orphaning the placeholder.
+2. **The hold amount source, if a website hold is ever built.** Mobile
+   holds `booking.price_estimate` at accept time. The website's work order
+   billing is line-item-driven and starts at `{ total: 0, ... }` — there's
+   often nothing real to hold against at the point a customer would first
+   see a hold control. Undecided.
+3. **Three independent `bookings.status` "start job" writers**, unrelated
+   to `work_orders` entirely and to each other: the contractor job list
+   page, the job detail page (`ContractorJobActions.tsx`), and — separately
+   — the work-order page's own `work_orders.status`-based flow.
+   `bookings.status = 'in_progress'` is real, load-bearing state (it's the
+   literal filter several list/calendar queries run on), not just a badge,
+   and it carries pre-work-order-stage logic (`pending`/`accepted`/
+   `cancelled`) the work-order state machine has no equivalent for at all.
+   Not retired, not consolidated this pass — every reader listed would need
+   migrating to `work_orders` first, and a pre-work-order-stage mechanism
+   would need to exist before any of the three could safely become a no-op.
