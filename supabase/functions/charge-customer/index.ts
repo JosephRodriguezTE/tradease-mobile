@@ -43,14 +43,15 @@ Deno.serve(async (req: Request) => {
 
   const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
-  // Fix 4 will address this path — left exactly as-is here.
   let callerId: string | null = null;
   if (!isInternal) {
-    // Validate the user JWT
-    const userClient = createClient(SUPABASE_URL, SERVICE_KEY, {
-      global: { headers: { Authorization: authHeader ?? '' } },
-    });
-    const { data: { user } } = await userClient.auth.getUser();
+    // Validate the user JWT by passing it to getUser() explicitly, rather
+    // than relying on ambient client session state a freshly-constructed
+    // client never has.
+    const token = authHeader?.replace(/^Bearer\s+/i, '').trim();
+    if (!token) return json({ error: 'Unauthorized' }, 401);
+    const userClient = createClient(SUPABASE_URL, SERVICE_KEY);
+    const { data: { user } } = await userClient.auth.getUser(token);
     if (!user) return json({ error: 'Unauthorized' }, 401);
     callerId = user.id;
   }
