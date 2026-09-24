@@ -67,6 +67,19 @@
 -- Service-role behavior (auth.uid() IS NULL) is unchanged — those writes
 -- still pass through untouched, so the admin panel's plan dropdown keeps
 -- working exactly as before.
+--
+-- NOT FINAL — SUPERSEDED SAME DAY. The protect_contractor_billing_fields()
+-- body below (the version this migration actually applies) unconditionally
+-- blocks every authenticated write to plan/stripe_customer_id/
+-- stripe_subscription_id, full stop. Ten minutes later,
+-- 20260920230701_scope_bypass_protection_and_admin_plan_rpc.sql replaced
+-- this same function again to add a current_setting('app.bypass_protection',
+-- true) scope check, so the new admin_update_contractor_plan() RPC
+-- (introduced in that migration, called by an authenticated admin, not
+-- service-role) could legitimately update plan by setting that scope first.
+-- The live, current function is the one in that later file, not this one.
+-- This file is kept as an accurate record of what actually ran at the time;
+-- it is not a description of the function's current behavior.
 -- ============================================================================
 
 drop trigger if exists guard_plan_update on public.contractors;
