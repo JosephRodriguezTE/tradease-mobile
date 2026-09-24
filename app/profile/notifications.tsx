@@ -49,6 +49,7 @@ const CONTRACTOR_DEFAULTS = {
   email_new_message:      true,
   email_job_cancelled:    true,
   email_verification:     true,
+  email_new_job:          true,
 } as const;
 
 const CUSTOMER_PUSH = [
@@ -79,6 +80,7 @@ const CONTRACTOR_EMAIL = [
   { key: 'email_new_message',   label: 'New Messages',        sub: 'When you receive a chat message' },
   { key: 'email_job_cancelled', label: 'Job Cancelled',        sub: 'If a customer cancels a booking' },
   { key: 'email_verification',  label: 'Verification Updates', sub: 'Changes to your verification status' },
+  { key: 'email_new_job',       label: 'New Job Nearby',       sub: 'New jobs posted in your area' },
 ];
 
 type Prefs = Record<string, boolean>;
