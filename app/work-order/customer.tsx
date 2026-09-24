@@ -904,12 +904,10 @@ function CompletionSheet({
     setPhase('processing');
     try {
       // 1. Submit review
-      const { error: reviewErr } = await supabase.from('reviews').insert({
-        booking_id:     wo.booking_id,
-        contractor_id:  wo.contractor_id,
-        customer_id:    wo.customer_id,
-        rating_overall: stars,
-        review_text:    review.trim() || null,
+      const { error: reviewErr } = await supabase.rpc('submit_review', {
+        p_booking_id:  wo.booking_id,
+        p_rating:      stars,
+        p_review_text: review.trim() || null,
       });
       if (reviewErr) throw reviewErr;
 
