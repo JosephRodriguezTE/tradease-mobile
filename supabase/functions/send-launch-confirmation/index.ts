@@ -12,11 +12,9 @@
 // JWT and isn't sent as Authorization.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
-import { getServiceKey } from '../_shared/secretKey.ts'
-import { isValidInternalSecret } from '../_shared/internalSecret.ts'
+import { getInternalSecret, isValidInternalSecret } from '../_shared/internalSecret.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
-const SERVICE_KEY = getServiceKey()
 
 interface LaunchSignup {
   id: string
@@ -71,17 +69,11 @@ serve(async (req: Request) => {
     console.log('[send-launch-confirmation] DECISION: send — email present:', signup.email, 'role:', signup.role)
 
     console.log('[send-launch-confirmation] Invoking send-email for', signup.id)
-    // Plain fetch with an explicit Authorization header, not
-    // supabase.functions.invoke() -- invoke() did not reproduce a
-    // matching Authorization: Bearer <SERVICE_KEY> header for send-email's
-    // own manual string-comparison auth check once SERVICE_KEY became an
-    // sb_secret_ value, and returned a 401 with no other explanation.
-    // A direct fetch removes the SDK's own header handling as a variable.
     const sendEmailRes = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${SERVICE_KEY}`,
+        'x-tradease-internal': getInternalSecret(),
       },
       body: JSON.stringify({
         to: signup.email,
