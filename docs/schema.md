@@ -113,9 +113,16 @@ is_available, is_online, lat, lng, last_location_update, verification_status,
 verification_submitted_at, rating (defaults 5.0), push_token, plan, years_in_business,
 bio, profile_published, specialties (text[]), avatar_url`
 
-RLS: **CRITICAL, per `SKILL.md` Fix 1B** — plan upgrades could reportedly be
-self-granted (bypassing the paywall) unless a `prevent_plan_self_update` trigger is
-in place. Application status live unconfirmed.
+RLS: confirmed live (2026-09-24). `protect_contractor_billing_fields()` and
+`protect_contractor_columns()` (BEFORE UPDATE triggers on `contractors`) block
+any authenticated direct write to `plan`, `stripe_customer_id`,
+`stripe_subscription_id`, `rating`, `verified`, and the verification fields
+unless `app.bypass_protection` is scoped correctly for that write; admin plan
+changes go through `admin_update_contractor_plan()`. `SKILL.md` Fix 1B's
+`prevent_plan_self_update`/`guard_plan_update` was a separate, fully
+redundant trigger that never actually fired (see
+`supabase/migrations/20260920010000_consolidate_contractor_plan_guards.sql`
+for why) and was dropped 2026-09-20 — it no longer exists.
 
 ## subscriptions
 Not seen directly in either app codebase's client-side queries (likely

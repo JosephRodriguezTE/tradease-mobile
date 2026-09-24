@@ -540,7 +540,9 @@ export default function ContractorCalendarScreen() {
         <Text style={[s.dayHeader, { color: C.textPrimary }]}>{dayHeaderLabel}</Text>
 
         {loading ? (
-          <ActivityIndicator color={C.orange} style={{ marginTop: 40 }} />
+          <View style={{ alignItems: 'center', paddingTop: 40 }}>
+            <HammerLoader size={64} />
+          </View>
         ) : dayEvents.length === 0 ? (
           <View style={s.empty}>
             <Ionicons name="calendar-outline" size={48} color={C.border} />

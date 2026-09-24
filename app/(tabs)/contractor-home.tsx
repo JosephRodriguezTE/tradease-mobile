@@ -92,16 +92,6 @@ function contractorTradeIds(c: { trade_type?: string | null; contractor_trades?:
   return c?.trade_type ? [c.trade_type] : [];
 }
 
-function jobMatchesContractorTrades(jobTrade: string | null | undefined, tradeIds: string[]): boolean {
-  // Empty tradeIds only happens when the contractor has neither
-  // contractor_trades rows nor a trade_type set at all -- no trade info
-  // whatsoever, not "matches everything by default" for someone who simply
-  // hasn't synced their multi-select trades yet (that case is handled by
-  // the trade_type fallback in contractorTradeIds above).
-  return tradeIds.length === 0 || (!!jobTrade && tradeIds.includes(jobTrade));
-}
-
-
 function getJobStatusLabel(status: string) {
   return ({ confirmed: 'Confirmed', in_progress: 'In Progress', completed: 'Awaiting Payment' } as Record<string,string>)[status] ?? status;
 }
