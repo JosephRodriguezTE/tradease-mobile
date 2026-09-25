@@ -40,13 +40,6 @@ verify_jwt = false
 [functions.charge-customer]
 verify_jwt = false
 
-# Requires Authorization: Bearer <SERVICE_ROLE_KEY> literally. Confirmed
-# dead: no Database Webhook on bookings (supabase_functions.hooks is
-# empty for that table), no pg_net trigger in any migration, and no
-# client could supply the raw service-role key anyway.
-[functions.match-job]
-verify_jwt = false
-
 [functions.agent-job-match]
 verify_jwt = true
 
