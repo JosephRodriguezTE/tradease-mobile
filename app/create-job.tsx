@@ -464,7 +464,9 @@ export default function CreateJobScreen() {
       const confirmed = await new Promise<boolean>(resolve =>
         Alert.alert(
           action === 'post' ? 'Post this job?' : 'Find a contractor?',
-          `${summary}\n\nThis will be visible to contractors. Only post if you\'re ready to hire.`,
+          action === 'post'
+            ? `${summary}\n\nThis will be visible to contractors. Only post if you\'re ready to hire.`
+            : `${summary}\n\nNothing is posted yet — this saves your job so you can browse and pick a contractor.`,
           [
             { text: 'Review', style: 'cancel', onPress: () => resolve(false) },
             { text: action === 'post' ? 'Post Job' : 'Find Contractor', onPress: () => resolve(true) },
@@ -491,6 +493,24 @@ export default function CreateJobScreen() {
         const id = await saveDraft();
         setSaving(false);
         if (id) router.replace('/(tabs)/jobs' as any);
+        return;
+      }
+
+      // "Find a Contractor" no longer inserts a live pending booking. That
+      // used to create a status:'pending' row with no contractor_id, which
+      // notify_new_job_posted() broadcasts to every nearby matching
+      // contractor as a new lead -- meaning "let me browse and pick" looked
+      // identical to "post publicly" to every contractor who got notified,
+      // and the row itself was never read again once the user left this
+      // screen. This now saves the same draft row Save-as-Draft uses
+      // (status: 'draft', outside notify_new_job_posted()'s status =
+      // 'pending' condition -- see migration comment) and carries its id
+      // forward so selecting a contractor resolves back to this draft
+      // instead of rebuilding the job card from scratch.
+      if (action === 'find') {
+        const id = await saveDraft();
+        setSaving(false);
+        if (id) router.replace(`/find-contractor?trade=${encodeURIComponent(selectedTrade)}&draftId=${id}` as any);
         return;
       }
 
@@ -594,10 +614,10 @@ export default function CreateJobScreen() {
       }
 
       const ibPrice = isInstantBook ? parseInt(instantBookPrice.replace(/[^0-9]/g, ''), 10) : null;
-      // Drafts return earlier (line ~404-409) and never reach this payload.
-      // 'post' = public listing, 48h window. 'find' = direct request, 24h window.
-      const requestMode = action === 'post' ? 'post' : 'request';
-      const windowHours = action === 'post' ? 48 : 24;
+      // 'draft' and 'find' both return earlier now and never reach this
+      // payload -- only 'post' (public listing, 48h window) does.
+      const requestMode = 'post';
+      const windowHours = 48;
       const bookingPayload = {
         customer_id:         freshUser.id,
         user_id:             freshUser.id,
@@ -633,15 +653,11 @@ export default function CreateJobScreen() {
       if (error) throw error;
       if (!draftId && insertResult?.id) setDraftId(insertResult.id);
 
-      if (action === 'post') {
-        const bookingId = insertResult?.id ?? draftId;
-        Alert.alert('Job Posted! 🎉', 'Contractors in your area will be notified.', [
-          { text: 'View My Booking', onPress: () => router.replace(`/job/${bookingId}` as any) },
-          { text: 'My Bookings', onPress: () => router.replace('/(tabs)/jobs' as any) },
-        ]);
-      } else {
-        router.replace(`/find-contractor?trade=${encodeURIComponent(selectedTrade)}` as any);
-      }
+      const bookingId = insertResult?.id ?? draftId;
+      Alert.alert('Job Posted! 🎉', 'Contractors in your area will be notified.', [
+        { text: 'View My Booking', onPress: () => router.replace(`/job/${bookingId}` as any) },
+        { text: 'My Bookings', onPress: () => router.replace('/(tabs)/jobs' as any) },
+      ]);
     } catch (err: any) {
       Alert.alert('Error', err.message);
     } finally {
