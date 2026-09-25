@@ -6199,5 +6199,30 @@ END $$;
 
 
 -- ============================================================================
+-- 15. STORAGE BUCKETS
+-- The storage.objects policies in section 12 reference these bucket_id
+-- values by name (avatars, job-photos, portfolio, portfolio-completed,
+-- verification-docs, work-orders). Without the buckets existing, those
+-- policies have nothing to apply to. Values below (public flag, size
+-- limit, allowed MIME types) are read from live storage.buckets.
+-- ============================================================================
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types, avif_autodetection)
+VALUES
+  ('avatars', 'avatars', true, 5242880, ARRAY['image/jpeg','image/png','image/webp','image/gif'], false),
+  ('job-photos', 'job-photos', true, NULL, NULL, false),
+  ('portfolio', 'portfolio', true, 5242880, ARRAY['image/jpeg','image/jpg','image/png','image/webp','image/gif','image/avif','image/heic'], false),
+  ('portfolio-completed', 'portfolio-completed', true, NULL, NULL, false),
+  ('verification-docs', 'verification-docs', false, NULL, NULL, false),
+  ('work-orders', 'work-orders', false, 10485760, ARRAY['image/jpeg','image/png','image/webp','image/heic','image/heif','application/pdf'], false)
+ON CONFLICT (id) DO UPDATE SET
+  name               = EXCLUDED.name,
+  public             = EXCLUDED.public,
+  file_size_limit    = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types,
+  avif_autodetection = EXCLUDED.avif_autodetection;
+
+
+-- ============================================================================
 -- END OF BASELINE SNAPSHOT
 -- ============================================================================
