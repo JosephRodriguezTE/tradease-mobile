@@ -24,6 +24,7 @@ const NEVER_SUPPRESSIBLE = new Set([
   "booking_approved",           // payment about to release
   "verification_approved",      // account status, gates going online
   "verification_rejected",
+  "ops_realtime_partition_gap", // infra alert to admins, deliberately dedup'd upstream to fire once per incident -- must not be silently droppable
 ]);
 
 const TYPE_TO_PREF_KEY: Record<string, string> = {
