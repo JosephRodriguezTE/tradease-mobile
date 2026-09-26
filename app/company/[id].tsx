@@ -58,7 +58,11 @@ function StarRating({ rating, size = 14 }: { rating: number; size?: number }) {
 }
 
 export default function ContractorPublicProfile() {
-  const { id }   = useLocalSearchParams<{ id:string }>();
+  const { id, draftId } = useLocalSearchParams<{ id:string; draftId?: string }>();
+  // Carries a draft started via "Find a Contractor" through to create-job,
+  // so the trade/price/time/address already saved there survive picking a
+  // contractor from this profile instead of being rebuilt from scratch.
+  const bookHref = `/create-job?contractor=${id}${draftId ? `&draftId=${draftId}` : ''}`;
   const router   = useRouter();
   const { colors: C } = useTheme();
 
@@ -152,7 +156,7 @@ export default function ContractorPublicProfile() {
             <Text style={{ flex:1, fontSize:TY.md, fontWeight:FW.black, color:C.textPrimary }} numberOfLines={1}>
               {contractor.company_name}
             </Text>
-            <TouchableOpacity style={[s.bookBtnSmall, { backgroundColor:C.orange }]} onPress={() => router.push(`/create-job?contractor=${id}`)}>
+            <TouchableOpacity style={[s.bookBtnSmall, { backgroundColor:C.orange }]} onPress={() => router.push(bookHref as any)}>
               <Text style={{ fontSize:TY.sm, fontWeight:FW.black, color:'#fff' }}>Book</Text>
             </TouchableOpacity>
           </View>
@@ -237,7 +241,7 @@ export default function ContractorPublicProfile() {
           <View style={{ flexDirection:'row', gap:SP[3], marginBottom:SP[5] }}>
             <TouchableOpacity
               style={[s.bookBtn, { backgroundColor:C.orange }]}
-              onPress={() => router.push(`/create-job?contractor=${id}`)}
+              onPress={() => router.push(bookHref as any)}
             >
               <Ionicons name="calendar-outline" size={18} color="#fff" />
               <Text style={s.bookBtnText}>Book Now</Text>
@@ -494,7 +498,7 @@ export default function ContractorPublicProfile() {
           {/* Bottom CTA */}
           <TouchableOpacity
             style={[s.bookBtn, { backgroundColor:C.orange, marginBottom:SP[10] }]}
-            onPress={() => router.push(`/create-job?contractor=${id}`)}
+            onPress={() => router.push(bookHref as any)}
           >
             <Ionicons name="calendar-outline" size={18} color="#fff" />
             <Text style={s.bookBtnText}>Book {contractor.company_name}</Text>

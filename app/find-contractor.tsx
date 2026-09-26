@@ -32,13 +32,34 @@ const PLAN_META: Record<string, { label: string; color: string }> = {
 // ─── CompanyCard ─────────────────────────────────────────────────────────────
 // Same card the contractor sees — with optional glow treatment and message btn
 
-function CompanyCard({ contractor, showGlow, onMessage }: {
+function CompanyCard({ contractor, showGlow, onMessage, draftId }: {
   contractor: any;
   showGlow?: boolean;
   onMessage?: () => void;
+  draftId?: string | null;
 }) {
   const router    = useRouter();
   const { colors: C } = useTheme();
+
+  // Attaches this contractor to the carried-over draft (see create-job.tsx's
+  // "Find a Contractor" -- it saves a draft and carries its id here instead
+  // of the old behavior of inserting a live pending booking) before routing
+  // to the company card, so the job card doesn't have to be rebuilt from
+  // scratch after viewing the profile. Best-effort: if this write fails,
+  // company/[id].tsx's own "Book" button still passes ?contractor= as a
+  // fallback -- the flow still ends correctly, it just won't have survived
+  // an app background/kill between here and finishing the job card.
+  async function selectContractor() {
+    if (draftId) {
+      try {
+        await supabase
+          .from('bookings')
+          .update({ contractor_id: contractor.id, contractor_name: contractor.company_name, request_mode: 'direct' })
+          .eq('id', draftId);
+      } catch {}
+    }
+    router.push(`/company/${contractor.id}${draftId ? `?draftId=${draftId}` : ''}` as any);
+  }
 
   const avatarUrl   = contractor?.avatar_url?.trim() || null;
   const displayName = contractor?.company_name ?? 'Contractor';
@@ -185,7 +206,7 @@ function CompanyCard({ contractor, showGlow, onMessage }: {
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <TouchableOpacity
           style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 10, borderWidth: 1, borderColor: C.orange, paddingVertical: 11, backgroundColor: 'rgba(255,98,0,0.06)' }}
-          onPress={() => router.push(`/company/${contractor.id}` as any)}
+          onPress={selectContractor}
           activeOpacity={0.8}
         >
           <Ionicons name="business-outline" size={15} color={C.orange} />
@@ -213,8 +234,8 @@ export default function FindContractorScreen() {
   const { colors: Colors } = useTheme();
   const router = useRouter();
   const { user } = useAuth();
-  const { trade: tradeParam, category: categoryParam, aiMatched, jobTitle, query: aiQuery } =
-    useLocalSearchParams<{ trade?: string; category?: string; aiMatched?: string; jobTitle?: string; query?: string }>();
+  const { trade: tradeParam, category: categoryParam, aiMatched, jobTitle, query: aiQuery, draftId } =
+    useLocalSearchParams<{ trade?: string; category?: string; aiMatched?: string; jobTitle?: string; query?: string; draftId?: string }>();
 
   const [contractors,   setContractors]   = useState<any[]>([]);
   const [loading,       setLoading]       = useState(true);
@@ -476,6 +497,7 @@ export default function FindContractorScreen() {
                       contractor={c}
                       showGlow={true}
                       onMessage={() => handleMessage(c)}
+                      draftId={draftId}
                     />
                   ))}
                   {standardContractors.length > 0 && (
@@ -494,6 +516,7 @@ export default function FindContractorScreen() {
                   key={c.id}
                   contractor={c}
                   onMessage={() => handleMessage(c)}
+                  draftId={draftId}
                 />
               ))}
             </>

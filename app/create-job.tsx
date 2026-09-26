@@ -64,12 +64,22 @@ export default function CreateJobScreen() {
   const { colors: Colors } = useTheme();
   const router = useRouter();
   const { user } = useAuth();
-  const params = useLocalSearchParams<{ trade?: string; draftId?: string; resume?: string; editId?: string }>();
+  const params = useLocalSearchParams<{ trade?: string; draftId?: string; resume?: string; editId?: string; contractor?: string }>();
 
   const [step, setStep] = useState(params.trade ? 1 : 0);
   const [saving, setSaving] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(params.draftId ?? null);
   const [detectingLocation, setDetectingLocation] = useState(false);
+
+  // Set when this job card is targeting one specific contractor -- from the
+  // company card ("Book" -> ?contractor=<id>) or from a draft that already
+  // has a contractor attached (find-contractor's "attach on select", see
+  // below). Drives three things: the trade step gets filtered/skipped to
+  // this contractor's own trades, saveDraft() carries contractor_id/
+  // contractor_name/request_mode along on every save, and the final step
+  // becomes "Request {company_name}" instead of Post/Find.
+  const [targetContractor, setTargetContractor] = useState<{ id: string; company_name: string } | null>(null);
+  const [contractorTradeIds, setContractorTradeIds] = useState<string[] | null>(null);
 
   // Selections
   const [selectedTrade, setSelectedTrade] = useState(params.trade ?? '');
@@ -98,6 +108,45 @@ export default function CreateJobScreen() {
 
   const slideAnim = useRef(new Animated.Value(0)).current;
 
+  // Resolves and applies a target contractor: company_name for the label
+  // and "Request {name}" button, contractor_trades for filtering/skipping
+  // the trade step. Shared by the company-card entry (?contractor=) and by
+  // a draft that already has one attached (find-contractor's
+  // attach-on-select, or simply resuming a draft that had it set).
+  async function loadTargetContractor(contractorId: string) {
+    const { data: contractor } = await supabase
+      .from('contractors')
+      .select('id, company_name')
+      .eq('id', contractorId)
+      .maybeSingle();
+    if (!contractor) return;
+    setTargetContractor({ id: contractor.id, company_name: contractor.company_name });
+
+    const { data: trades } = await supabase
+      .from('contractor_trades')
+      .select('trade_id')
+      .eq('contractor_id', contractorId);
+    setContractorTradeIds((trades ?? []).map((t: any) => t.trade_id));
+  }
+
+  // Company-card entry: resolve the target contractor immediately from the
+  // query param. find-contractor entry resolves it from the draft row
+  // instead, in the draftId-load effect below.
+  useEffect(() => {
+    if (!params.contractor) return;
+    loadTargetContractor(params.contractor);
+  }, []);
+
+  // Once the target contractor's trades are known: if they only offer one,
+  // select it and skip the trade step if we're still sitting on it. If
+  // selectedTrade is already set (e.g. arrived via find-contractor's own
+  // ?trade= param), leave it alone rather than overriding a real choice.
+  useEffect(() => {
+    if (!contractorTradeIds || contractorTradeIds.length !== 1) return;
+    setSelectedTrade(prev => prev || contractorTradeIds[0]);
+    setStep(s => (s === 0 ? 1 : s));
+  }, [contractorTradeIds]);
+
   // Load existing draft when draftId param is provided
   useEffect(() => {
     if (!params.draftId) return;
@@ -121,6 +170,10 @@ export default function CreateJobScreen() {
       const tradeJobs = draft.trade ? (TRADE_JOBS[draft.trade] ?? []) : [];
       setSelectedJob(tradeJobs.find((j: any) => (draft.description ?? '').startsWith(j.label + ':')) ?? null);
       setIsPublic(!!draft.is_public);
+      // Draft already has a contractor attached (find-contractor's
+      // attach-on-select, or resuming a draft that had one) -- resolve it
+      // the same way the company-card entry does.
+      if (draft.contractor_id) loadTargetContractor(draft.contractor_id);
       // Jump to review if complete, otherwise to the furthest filled step
       if (draft.trade && draft.price_estimate && draft.notes) setStep(3);
       else if (draft.trade) setStep(1);
@@ -401,6 +454,17 @@ export default function CreateJobScreen() {
       is_public:      isPublic,
       payment_status: 'unpaid',
       refund_status:  'none',
+      // Carries the target contractor onto the draft itself so it survives
+      // navigation (find-contractor, backgrounding, resuming later) the
+      // same way the rest of the job card already does. request_mode is
+      // set here, not just at final submission, because
+      // restrict_booking_update()'s "assign a contractor without a
+      // matching offer" guard checks it on every update, including this one.
+      ...(targetContractor ? {
+        contractor_id:   targetContractor.id,
+        contractor_name: targetContractor.company_name,
+        request_mode:    'direct',
+      } : {}),
     };
     if (draftId) {
       await supabase.from('bookings').update(payload).eq('id', draftId);
@@ -439,7 +503,7 @@ export default function CreateJobScreen() {
     ]);
   };
 
-  const handlePost = async (action: 'post' | 'find' | 'draft') => {
+  const handlePost = async (action: 'post' | 'find' | 'draft' | 'request') => {
     if (!user) {
       await saveGuestDraft();
       setShowAuthSheet(true);
@@ -447,7 +511,7 @@ export default function CreateJobScreen() {
     }
 
     // Confirm before committing a real job post
-    if (action === 'post' || action === 'find') {
+    if (action === 'post' || action === 'find' || action === 'request') {
       if (!selectedTrade) { Alert.alert('Select a Trade', 'Please choose the type of service you need.'); return; }
       if (!selectedJob)   { Alert.alert('Select a Service', 'Please choose the specific service you need.'); return; }
       if (!selectedPrice) { Alert.alert('Select Budget', 'Please choose your budget range.'); return; }
@@ -463,13 +527,15 @@ export default function CreateJobScreen() {
 
       const confirmed = await new Promise<boolean>(resolve =>
         Alert.alert(
-          action === 'post' ? 'Post this job?' : 'Find a contractor?',
+          action === 'post' ? 'Post this job?' : action === 'request' ? `Request ${targetContractor?.company_name ?? 'this contractor'}?` : 'Find a contractor?',
           action === 'post'
             ? `${summary}\n\nThis will be visible to contractors. Only post if you\'re ready to hire.`
+            : action === 'request'
+            ? `${summary}\n\nThis sends your request directly to ${targetContractor?.company_name ?? 'this contractor'} — nobody else will see it.`
             : `${summary}\n\nNothing is posted yet — this saves your job so you can browse and pick a contractor.`,
           [
             { text: 'Review', style: 'cancel', onPress: () => resolve(false) },
-            { text: action === 'post' ? 'Post Job' : 'Find Contractor', onPress: () => resolve(true) },
+            { text: action === 'post' ? 'Post Job' : action === 'request' ? 'Send Request' : 'Find Contractor', onPress: () => resolve(true) },
           ],
         )
       );
@@ -615,9 +681,10 @@ export default function CreateJobScreen() {
 
       const ibPrice = isInstantBook ? parseInt(instantBookPrice.replace(/[^0-9]/g, ''), 10) : null;
       // 'draft' and 'find' both return earlier now and never reach this
-      // payload -- only 'post' (public listing, 48h window) does.
-      const requestMode = 'post';
-      const windowHours = 48;
+      // payload -- 'post' (public listing, 48h window) and 'request' (one
+      // named contractor, 24h window) both do.
+      const requestMode = action === 'request' ? 'direct' : 'post';
+      const windowHours = action === 'request' ? 24 : 48;
       const bookingPayload = {
         customer_id:         freshUser.id,
         user_id:             freshUser.id,
@@ -628,7 +695,7 @@ export default function CreateJobScreen() {
         notes:               address,
         job_lat:             coords?.lat ?? null,
         job_lng:             coords?.lng ?? null,
-        is_public:           isPublic,
+        is_public:           action === 'request' ? false : isPublic,
         town,
         nearest_major_road:  null,
         price_estimate:      isInstantBook ? (ibPrice ?? 0) : (selectedPrice?.max ?? 0),
@@ -643,6 +710,10 @@ export default function CreateJobScreen() {
         request_mode:        requestMode,
         request_expires_at:  new Date(Date.now() + windowHours * 60 * 60 * 1000).toISOString(),
         ...(photoUrls.length > 0 ? { photo_urls: photoUrls } : {}),
+        ...(action === 'request' && targetContractor ? {
+          contractor_id:   targetContractor.id,
+          contractor_name: targetContractor.company_name,
+        } : {}),
       };
 
       // If resuming a draft, promote it in place — no duplicate row
@@ -654,10 +725,17 @@ export default function CreateJobScreen() {
       if (!draftId && insertResult?.id) setDraftId(insertResult.id);
 
       const bookingId = insertResult?.id ?? draftId;
-      Alert.alert('Job Posted! 🎉', 'Contractors in your area will be notified.', [
-        { text: 'View My Booking', onPress: () => router.replace(`/job/${bookingId}` as any) },
-        { text: 'My Bookings', onPress: () => router.replace('/(tabs)/jobs' as any) },
-      ]);
+      if (action === 'request') {
+        Alert.alert('Request Sent! 📩', `${targetContractor?.company_name ?? 'The contractor'} has been notified — nobody else can see this request.`, [
+          { text: 'View My Booking', onPress: () => router.replace(`/job/${bookingId}` as any) },
+          { text: 'My Bookings', onPress: () => router.replace('/(tabs)/jobs' as any) },
+        ]);
+      } else {
+        Alert.alert('Job Posted! 🎉', 'Contractors in your area will be notified.', [
+          { text: 'View My Booking', onPress: () => router.replace(`/job/${bookingId}` as any) },
+          { text: 'My Bookings', onPress: () => router.replace('/(tabs)/jobs' as any) },
+        ]);
+      }
     } catch (err: any) {
       Alert.alert('Error', err.message);
     } finally {
@@ -667,6 +745,12 @@ export default function CreateJobScreen() {
 
   const tradeJobs = selectedTrade ? TRADE_JOBS[selectedTrade] ?? [] : [];
   const priceRanges = selectedTrade ? PRICE_RANGES[selectedTrade] ?? [] : [];
+  // Targeting one contractor: only offer trades they actually do. Falls
+  // back to the full list if they have none on file (contractors_missing_trades
+  // is exactly this edge case) rather than showing an empty picker.
+  const tradeOptions = contractorTradeIds && contractorTradeIds.length > 0
+    ? ALL_TRADES.filter(t => contractorTradeIds.includes(t))
+    : ALL_TRADES;
 
   return (
     <View style={styles.container}>
@@ -697,7 +781,7 @@ export default function CreateJobScreen() {
               <Text style={styles.stepTitle}>What do you need?</Text>
               <Text style={styles.stepSub}>Select the type of service you're looking for.</Text>
               <View style={styles.tradeGrid}>
-                {ALL_TRADES.map((trade) => (
+                {tradeOptions.map((trade) => (
                   <TouchableOpacity
                     key={trade}
                     style={[styles.tradeCard, selectedTrade === trade && styles.tradeCardSelected]}
@@ -1115,6 +1199,19 @@ export default function CreateJobScreen() {
               <Text style={styles.stepTitle}>Review Your Job Card</Text>
               <Text style={styles.stepSub}>Confirm the details before posting.</Text>
 
+              {targetContractor && (
+                <View style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 8,
+                  backgroundColor: 'rgba(255,98,0,0.1)', borderWidth: 1, borderColor: 'rgba(255,98,0,0.3)',
+                  borderRadius: 12, padding: 12, marginBottom: 16,
+                }}>
+                  <Text style={{ fontSize: 18 }}>📩</Text>
+                  <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: Colors.orange }}>
+                    Requesting {targetContractor.company_name} directly — this won't be shown to anyone else.
+                  </Text>
+                </View>
+              )}
+
               {/* Job Card preview */}
               <View style={styles.jobCardPreview}>
                 <View style={styles.jobCardPreviewHeader}>
@@ -1186,45 +1283,69 @@ export default function CreateJobScreen() {
               {/* Action choices */}
               <Text style={styles.sectionLabel}>WHAT WOULD YOU LIKE TO DO?</Text>
 
-              <TouchableOpacity
-                style={styles.actionCard}
-                onPress={() => handlePost('post')}
-                disabled={saving}
-                activeOpacity={0.85}
-              >
-                <View style={styles.actionCardLeft}>
-                  <View style={[styles.actionIconBox, { backgroundColor: 'rgba(255,98,0,0.15)' }]}>
-                    <Text style={styles.actionIcon}>📢</Text>
+              {targetContractor ? (
+                <TouchableOpacity
+                  style={styles.actionCard}
+                  onPress={() => handlePost('request')}
+                  disabled={saving}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.actionCardLeft}>
+                    <View style={[styles.actionIconBox, { backgroundColor: 'rgba(255,98,0,0.15)' }]}>
+                      <Text style={styles.actionIcon}>📩</Text>
+                    </View>
+                    <View style={styles.actionInfo}>
+                      <Text style={styles.actionTitle}>Request {targetContractor.company_name}</Text>
+                      <Text style={styles.actionSub}>
+                        Sends directly to them — nobody else sees this request
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.actionInfo}>
-                    <Text style={styles.actionTitle}>Post Job</Text>
-                    <Text style={styles.actionSub}>
-                      Post to the job board — contractors near you will apply
-                    </Text>
-                  </View>
-                </View>
-                <Text style={styles.actionArrow}>→</Text>
-              </TouchableOpacity>
+                  <Text style={styles.actionArrow}>→</Text>
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={styles.actionCard}
+                    onPress={() => handlePost('post')}
+                    disabled={saving}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.actionCardLeft}>
+                      <View style={[styles.actionIconBox, { backgroundColor: 'rgba(255,98,0,0.15)' }]}>
+                        <Text style={styles.actionIcon}>📢</Text>
+                      </View>
+                      <View style={styles.actionInfo}>
+                        <Text style={styles.actionTitle}>Post Job</Text>
+                        <Text style={styles.actionSub}>
+                          Post to the job board — contractors near you will apply
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.actionArrow}>→</Text>
+                  </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.actionCard}
-                onPress={() => handlePost('find')}
-                disabled={saving}
-                activeOpacity={0.85}
-              >
-                <View style={styles.actionCardLeft}>
-                  <View style={[styles.actionIconBox, { backgroundColor: 'rgba(56,189,248,0.15)' }]}>
-                    <Text style={styles.actionIcon}>🔍</Text>
-                  </View>
-                  <View style={styles.actionInfo}>
-                    <Text style={styles.actionTitle}>Find a Contractor</Text>
-                    <Text style={styles.actionSub}>
-                      Browse and contact available contractors directly
-                    </Text>
-                  </View>
-                </View>
-                <Text style={styles.actionArrow}>→</Text>
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.actionCard}
+                    onPress={() => handlePost('find')}
+                    disabled={saving}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.actionCardLeft}>
+                      <View style={[styles.actionIconBox, { backgroundColor: 'rgba(56,189,248,0.15)' }]}>
+                        <Text style={styles.actionIcon}>🔍</Text>
+                      </View>
+                      <View style={styles.actionInfo}>
+                        <Text style={styles.actionTitle}>Find a Contractor</Text>
+                        <Text style={styles.actionSub}>
+                          Browse and contact available contractors directly
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.actionArrow}>→</Text>
+                  </TouchableOpacity>
+                </>
+              )}
 
               <TouchableOpacity
                 style={[styles.actionCard, { borderColor: '#2A2A2A' }]}

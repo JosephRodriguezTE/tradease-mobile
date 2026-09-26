@@ -40,6 +40,8 @@ const TYPE_ACCENT: Record<string, string> = {
   job_completed:                    '#38BDF8',
   payment_approved:                 '#FBBF24',
   new_job_nearby:                   '#FF6200',
+  direct_request:                   '#FF6200',
+  direct_request_declined:          '#EF4444',
   booking_cancelled_by_contractor:  '#EF4444',
   booking_cancelled:                '#EF4444',
 };
@@ -80,6 +82,8 @@ export default function NotificationsScreen() {
   const [loading,             setLoading]             = useState(true);
   const [refreshing,          setRefreshing]          = useState(false);
   const [cancelActionNotif,   setCancelActionNotif]   = useState<any>(null);
+  const [declineActionNotif,  setDeclineActionNotif]  = useState<any>(null);
+  const [repostingPublicly,   setRepostingPublicly]   = useState(false);
   const [savingDraft,         setSavingDraft]         = useState(false);
   const channelRef = useRef<any>(null);
 
@@ -161,6 +165,14 @@ export default function NotificationsScreen() {
       case 'new_job':
         router.push('/(tabs)/' as any);
         break;
+      case 'direct_request':
+        // Contractor's own copy -- routes to the job detail, which shows
+        // the "you were requested directly" banner with Accept/Decline.
+        if (data.booking_id) router.push(`/job/${data.booking_id}` as any);
+        break;
+      case 'direct_request_declined':
+        setDeclineActionNotif(notif);
+        break;
       case 'booking_cancelled_by_contractor':
         setCancelActionNotif(notif);
         break;
@@ -184,6 +196,27 @@ export default function NotificationsScreen() {
     setSavingDraft(false);
     setCancelActionNotif(null);
     Alert.alert('Draft saved', 'Your job was saved as a draft in My Bookings.');
+  }
+
+  // "Post publicly instead" -- the fallback offered on a direct_request_declined
+  // notification. repost_declined_request_publicly() verifies status =
+  // 'declined' and request_mode = 'direct' itself before clearing the
+  // contractor and reopening the booking as a normal public post, which
+  // broadcasts it the usual way.
+  async function handleRepostPublicly(notif: any) {
+    const bookingId = notif?.data?.booking_id;
+    if (!bookingId) return;
+    setRepostingPublicly(true);
+    try {
+      const { error } = await supabase.rpc('repost_declined_request_publicly', { p_booking_id: bookingId });
+      if (error) throw error;
+      setDeclineActionNotif(null);
+      Alert.alert('Posted publicly', 'Your job is now visible to nearby contractors.');
+    } catch (err: any) {
+      Alert.alert('Error', err.message ?? 'Could not post this publicly. Try again.');
+    } finally {
+      setRepostingPublicly(false);
+    }
   }
 
   async function markAllRead() {
@@ -408,6 +441,60 @@ export default function NotificationsScreen() {
                       <Text style={[s.modalActionText, { color: C.textPrimary }]}>Save as Draft</Text>
                     </>
                 }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Direct request declined -- offer to post publicly instead */}
+      <Modal
+        visible={!!declineActionNotif}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setDeclineActionNotif(null)}
+      >
+        <View style={s.modalOverlay}>
+          <TouchableOpacity
+            style={s.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setDeclineActionNotif(null)}
+          />
+          <View style={[s.modalSheet, { backgroundColor: C.surface, borderColor: C.border }]}>
+            <View style={s.modalHandle} />
+
+            <TouchableOpacity style={s.modalClose} onPress={() => setDeclineActionNotif(null)}>
+              <Ionicons name="close" size={20} color={C.textMuted} />
+            </TouchableOpacity>
+
+            <Text style={[s.modalTitle, { color: C.textPrimary }]}>Request declined</Text>
+            <Text style={[s.modalSub, { color: C.textSecondary }]}>
+              {declineActionNotif?.data?.contractor_name ?? 'The contractor'} declined your{' '}
+              {declineActionNotif?.data?.trade ?? 'job'} request. You can post it publicly so
+              other contractors nearby can see it, or leave it as is and try someone else later.
+            </Text>
+
+            <View style={s.modalActions}>
+              <TouchableOpacity
+                style={[s.modalActionBtn, { backgroundColor: C.orange }]}
+                onPress={() => handleRepostPublicly(declineActionNotif)}
+                disabled={repostingPublicly}
+              >
+                {repostingPublicly
+                  ? <ActivityIndicator color="#0A0A0A" size="small" />
+                  : <>
+                      <Ionicons name="megaphone-outline" size={20} color="#0A0A0A" />
+                      <Text style={[s.modalActionText, { color: '#0A0A0A' }]}>Post Publicly Instead</Text>
+                    </>
+                }
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[s.modalActionBtn, { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border }]}
+                onPress={() => setDeclineActionNotif(null)}
+              >
+                <Ionicons name="close-outline" size={20} color={C.textPrimary} />
+                <Text style={[s.modalActionText, { color: C.textPrimary }]}>Not Now</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -468,6 +468,53 @@ export default function JobDetailScreen() {
     }));
   }
 
+  async function acceptDirectRequest() {
+    if (!booking || !user) return;
+    const { data: myContractor } = await supabase.from('contractors').select('verification_status, verification_rejection_reason, company_name').eq('id', user.id).single();
+    if (myContractor?.verification_status !== 'approved') {
+      setVerifyGateStatus(
+        myContractor?.verification_status === 'pending_review' ? 'pending_review'
+          : myContractor?.verification_status === 'rejected'    ? 'rejected'
+          :                                                        'not_submitted'
+      );
+      setVerifyGateReason(myContractor?.verification_rejection_reason ?? null);
+      setVerifyGateOpen(true);
+      return;
+    }
+    setOfferSaving(true);
+    const { data: acceptedBooking, error } = await supabase.rpc('accept_direct_request', {
+      p_booking_id: id as string,
+      p_contractor_name: myContractor?.company_name || '',
+    });
+    setOfferSaving(false);
+    if (error) {
+      Alert.alert('Error', error.message || 'Could not accept this request.');
+      return;
+    }
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setBooking((p: any) => ({ ...p, ...(acceptedBooking ?? {}), status: 'confirmed' }));
+  }
+
+  async function declineDirectRequest() {
+    if (!booking) return;
+    Alert.alert('Decline this request?', 'The customer will be notified and can post the job publicly instead. You won\'t see this request again.', [
+      { text: 'Keep It', style: 'cancel' },
+      {
+        text: 'Decline', style: 'destructive', onPress: async () => {
+          setOfferSaving(true);
+          const { error } = await supabase.rpc('decline_direct_request', { p_booking_id: id as string });
+          setOfferSaving(false);
+          if (error) {
+            Alert.alert('Error', error.message || 'Could not decline this request.');
+            return;
+          }
+          setBooking((p: any) => ({ ...p, status: 'declined' }));
+          router.canGoBack() ? router.back() : router.replace('/(tabs)');
+        },
+      },
+    ]);
+  }
+
   const CANCELABLE = ['pending', 'accepted', 'confirmed', 'in_progress'];
 
   // A contractor's quote is only "confirmed" once contractor_id gets set on
@@ -757,6 +804,37 @@ export default function JobDetailScreen() {
           </>
         )}
 
+        {/* Direct request — contractor sees this as visibly different from
+            an open lead, with its own accept/decline instead of the quote
+            flow or the instant-book claim race. */}
+        {isContractor && !isExpired && booking.status === 'pending' && booking.request_mode === 'direct' && booking.contractor_id === user?.id && (
+          <View style={[s.offerBanner, { backgroundColor: 'rgba(255,98,0,0.08)', borderColor: 'rgba(255,98,0,0.3)', flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
+            <Text style={[s.offerBannerTitle, { color: C.orange }]}>📩 You Were Requested Directly</Text>
+            <Text style={[s.offerBannerSub, { color: C.textSecondary }]}>
+              {booking.customer_name ?? 'A customer'} asked for you by name — this job isn't visible to any other contractor.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                style={[s.offerBtn, { flex: 1, backgroundColor: 'transparent', borderWidth: 1, borderColor: 'rgba(239,68,68,0.4)' }]}
+                onPress={declineDirectRequest}
+                disabled={offerSaving}
+              >
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#EF4444' }}>Decline</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.offerBtn, s.offerBtnAccept, { flex: 1, backgroundColor: '#16A34A' }]}
+                onPress={acceptDirectRequest}
+                disabled={offerSaving}
+              >
+                {offerSaving
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={s.offerBtnAcceptText}>Accept</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Instant Book — contractor claim CTA */}
         {isContractor && !isExpired && booking.status === 'pending' && booking.is_instant_book && !booking.contractor_id && (
           <View style={[s.offerBanner, { backgroundColor: 'rgba(34,197,94,0.08)', borderColor: 'rgba(34,197,94,0.3)' }]}>
@@ -781,8 +859,27 @@ export default function JobDetailScreen() {
           </View>
         )}
 
+        {/* Pending direct request — customer view. Own copy since nothing
+            is being broadcast; only the one named contractor can see it. */}
+        {!isExpired && isCustomer && booking.status === 'pending' && booking.request_mode === 'direct' && (
+          <View style={[s.pendingCard, { backgroundColor: 'rgba(255,98,0,0.06)', borderColor: 'rgba(255,98,0,0.2)' }]}>
+            <ActivityIndicator color={C.orange} size="small" />
+            <View style={{ flex: 1 }}>
+              <Text style={[s.pendingTitle, { color: C.orange }]}>Waiting for {booking.contractor_name ?? 'a response'}...</Text>
+              <Text style={[s.pendingSub, { color: C.textSecondary }]}>
+                Only {booking.contractor_name ?? 'this contractor'} can see this request. You'll be notified as soon as they respond.
+              </Text>
+              {!!booking.request_expires_at && (
+                <Text style={[s.pendingSub, { color: C.orange, marginTop: 4, fontWeight: '700' }]}>
+                  {formatRemaining(booking.request_expires_at)}
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
+
         {/* Finding state — customer view only, no quote active, not instant book */}
-        {!isExpired && isCustomer && booking.status === 'pending' && !offer && !booking.is_instant_book && (
+        {!isExpired && isCustomer && booking.status === 'pending' && !offer && !booking.is_instant_book && booking.request_mode !== 'direct' && (
           <View style={[s.pendingCard, { backgroundColor: 'rgba(251,191,36,0.06)', borderColor: 'rgba(251,191,36,0.2)' }]}>
             <ActivityIndicator color="#FBBF24" size="small" />
             <View style={{ flex: 1 }}>
@@ -803,8 +900,10 @@ export default function JobDetailScreen() {
             is_quote_locked comes from public_job_by_id(): another contractor
             already has an active quote on this booking. submit_quote() would
             reject it server-side anyway (exclusivity check), so the button is
-            disabled here rather than letting the contractor hit that error. */}
-        {!isExpired && isContractor && booking.status === 'pending' && !offer && !booking.is_instant_book && (
+            disabled here rather than letting the contractor hit that error.
+            Excludes direct requests -- those get their own accept/decline
+            banner above, never a quote. */}
+        {!isExpired && isContractor && booking.status === 'pending' && !offer && !booking.is_instant_book && booking.request_mode !== 'direct' && (
           <View style={[s.pendingCard, { backgroundColor: booking.is_quote_locked ? 'rgba(120,120,120,0.08)' : 'rgba(255,98,0,0.06)', borderColor: booking.is_quote_locked ? 'rgba(120,120,120,0.2)' : 'rgba(255,98,0,0.2)', flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <Ionicons name={booking.is_quote_locked ? 'hourglass-outline' : 'pricetag-outline'} size={20} color={booking.is_quote_locked ? C.textMuted : C.orange} />
