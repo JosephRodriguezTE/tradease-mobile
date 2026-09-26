@@ -40,6 +40,7 @@ const CUSTOMER_DEFAULTS = {
 
 const CONTRACTOR_DEFAULTS = {
   push_new_job:           true,
+  push_direct_request:    true,
   push_new_message:       true,
   push_booking_confirmed: true,
   push_job_status:        true,
@@ -68,6 +69,7 @@ const CUSTOMER_EMAIL = [
 ];
 const CONTRACTOR_PUSH = [
   { key: 'push_new_job',           label: 'New Job Nearby',    sub: 'New jobs posted in your area' },
+  { key: 'push_direct_request',    label: 'Direct Requests',   sub: 'When a customer requests you by name' },
   { key: 'push_new_message',       label: 'New Messages',      sub: 'When you receive a chat message' },
   { key: 'push_booking_confirmed', label: 'Booking Confirmed', sub: 'When a job you accepted is confirmed' },
   { key: 'push_job_status',        label: 'Job Status Updates', sub: 'Quote expired and other job status changes' },
