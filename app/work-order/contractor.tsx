@@ -1269,8 +1269,9 @@ export default function ContractorWorkOrderScreen() {
     if (!woData) { setLoading(false); return; }
     setWo(woData);
 
-    const [custRes, liRes, piRes, progRes, evRes, mediaRes] = await Promise.all([
-      supabase.from('users').select('id,full_name,avatar_url,phone').eq('id', woData.customer_id).maybeSingle(),
+    const [custRes, custContactRes, liRes, piRes, progRes, evRes, mediaRes] = await Promise.all([
+      supabase.from('users_public').select('id,full_name,avatar_url').eq('id', woData.customer_id).maybeSingle(),
+      supabase.from('users_contact').select('phone').eq('id', woData.customer_id).maybeSingle(),
       supabase.from('payment_line_items').select('*').eq('work_order_id', woData.id).order('created_at'),
       woData.payment_intent_id
         ? supabase.from('payment_intents').select('id,status,amount_cents,captured_at,provider').eq('id', woData.payment_intent_id).maybeSingle()
@@ -1280,7 +1281,7 @@ export default function ContractorWorkOrderScreen() {
       supabase.from('work_order_media').select('*').eq('work_order_id', woData.id).order('created_at'),
     ]);
 
-    setCustomer(custRes.data ?? null);
+    setCustomer(custRes.data ? { ...custRes.data, ...(custContactRes.data ?? {}) } : null);
     setLineItems((liRes.data ?? []) as LineItem[]);
     setPI(piRes.data ?? null);
     setProgress((progRes.data ?? []) as ProgressItem[]);
