@@ -97,7 +97,7 @@ export default function ContractorPublicProfile() {
       const [{ data: rev }, { data: portfolio }, { data: completed }] = await Promise.all([
         supabase
           .from('reviews')
-          .select('id, rating_overall, review_text, created_at, users(full_name)')
+          .select('id, rating_overall, review_text, created_at, customer_id')
           .eq('contractor_id', id)
           .order('created_at', { ascending: false })
           .limit(10),
@@ -112,7 +112,15 @@ export default function ContractorPublicProfile() {
           .eq('contractor_id', id)
           .order('completed_at', { ascending: false }),
       ]);
-      setReviews(rev ?? []);
+
+      // reviews has no FK to users, so PostgREST can't embed it directly --
+      // batch-fetch reviewer names from the narrow public view instead.
+      const reviewerIds = [...new Set((rev ?? []).map(r => r.customer_id).filter(Boolean))];
+      const { data: reviewers } = reviewerIds.length
+        ? await supabase.from('users_public').select('id,full_name').in('id', reviewerIds)
+        : { data: [] as { id: string; full_name: string | null }[] };
+      const reviewerNameById = Object.fromEntries((reviewers ?? []).map(u => [u.id, u.full_name]));
+      setReviews((rev ?? []).map(r => ({ ...r, users: { full_name: reviewerNameById[r.customer_id] ?? null } })));
       setPortfolioItems((portfolio as PortfolioItem[]) ?? []);
       setCompletedJobs((completed as CompletedJob[]) ?? []);
       setLoading(false);

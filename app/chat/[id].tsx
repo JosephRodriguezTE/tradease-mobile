@@ -139,7 +139,7 @@ export default function ChatScreen() {
     const [msgs, otherCtr, otherUsr, myCtr, myUsr] = await Promise.all([
       getChatMessages(resolvedChatId),
       supabase.from('contractors_public').select('id,company_name,avatar_url').eq('id', other).maybeSingle(),
-      supabase.from('users').select('id,full_name,avatar_url').eq('id', other).maybeSingle(),
+      supabase.from('users_public').select('id,full_name,avatar_url').eq('id', other).maybeSingle(),
       supabase.from('contractors').select('company_name').eq('id', u.id).maybeSingle(),
       supabase.from('users').select('full_name').eq('id', u.id).maybeSingle(),
     ]);

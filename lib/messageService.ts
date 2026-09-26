@@ -79,7 +79,7 @@ export async function getChatList(): Promise<{ summaries: ChatSummary[]; userId:
   // Batch-lookup names and active bookings in parallel
   const [{ data: contractors }, { data: users }, { data: activeBookings }] = await Promise.all([
     supabase.from('contractors_public').select('id,company_name,avatar_url').in('id', otherIds),
-    supabase.from('users').select('id,full_name,avatar_url').in('id', otherIds),
+    supabase.from('users_public').select('id,full_name,avatar_url').in('id', otherIds),
     supabase
       .from('bookings')
       .select('id,customer_id,contractor_id,trade,status')
