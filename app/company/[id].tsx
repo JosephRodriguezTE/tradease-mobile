@@ -85,7 +85,7 @@ export default function ContractorPublicProfile() {
           id, company_name, trade_type, plan, rating, review_count,
           is_available, service_area, avatar_url, hourly_rate,
           description, experience, location, portfolio_photos,
-          banner_url, tagline, business_city, business_state, phone,
+          banner_url, tagline, business_city, business_state,
           insured, license_verified, verification_status, verified,
           total_bookings, response_time_avg, years_in_business,
           specializations, languages, website
