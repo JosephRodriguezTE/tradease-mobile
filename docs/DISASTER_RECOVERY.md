@@ -39,6 +39,27 @@ migrations after it contain real fixes (e.g. the account-deletion
 `booking_calendar` view fix, the plan-guard consolidation) that the baseline
 predates.
 
+**New tables/views need an explicit `GRANT`, or the client gets nothing.**
+As of `20260926140000_change_default_privileges.sql`, `postgres`'s default
+privileges in `public` no longer auto-grant `anon`/`authenticated` anything
+on new tables or views (they used to get full `SELECT, INSERT, UPDATE,
+DELETE, TRUNCATE, REFERENCES, TRIGGER` automatically — this is what silently
+exposed several views nobody had locked down; see that migration's own
+comment for the full story). A freshly-rebuilt project inherits this safe
+default from the start, since it's replayed like any other migration. The
+implication going forward: any *new* migration that adds a table or view the
+client SDK needs to read must include its own `GRANT SELECT ON ... TO anon,
+authenticated` (or just `authenticated`, if it shouldn't be public) — RLS
+alone won't make it reachable if the grant isn't there too. Forgetting this
+fails loudly (the client gets a permission error, not silently wrong data),
+which is the point.
+
+Note this only covers objects created by the `postgres` role — the same
+default for `supabase_admin`-owned objects could not be changed (`postgres`
+cannot assume that role; see the migration's comment). Nothing in this
+project's actual migration history has ever created a `public`-schema object
+as `supabase_admin`, so this gap is believed to be dormant, not live.
+
 ### 3. Verify the schema landed
 
 ```sql

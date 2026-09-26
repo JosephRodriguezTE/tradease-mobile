@@ -145,11 +145,14 @@ by name in a way I traced column-by-column this session. Each is flagged there a
 having an overly-permissive policy ("fully open," "anyone can approve," "everyone
 reads everyone's"). No column lists available without the live schema.
 
-## contractor_profiles (VIEW — SECURITY DEFINER)
-⚠️ UNCONFIRMED — not referenced anywhere in either repo's client code, and not
-mentioned in `SKILL.md` either. Either it exists live and is only used by an Edge
-Function / raw SQL neither client touches, or it doesn't exist yet and this was
-aspirational in the original draft. Needs the live table list to resolve.
+## contractor_profiles (VIEW — SECURITY DEFINER) — RESOLVED, then dropped
+Confirmed live 2026-09-26: it existed, duplicated `contractors_public`'s
+purpose, but exposed `phone` and `email` completely ungated (no
+`contractors_public`-style CASE gating, no RLS — views don't have their own).
+Re-grepped both repos plus the live database's function/trigger bodies —
+genuinely unused anywhere. Dropped in
+`supabase/migrations/20260926120000_drop_orphaned_public_views.sql`
+(definition captured as a comment there). No longer exists.
 
 ## <fill: other tables>
 `SKILL.md` also implies these exist, unconfirmed column-level: `reviews`,
