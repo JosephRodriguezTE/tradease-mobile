@@ -40,6 +40,7 @@ const TYPE_TO_PREF_KEY: Record<string, string> = {
   // -- general job status / progress --
   job_in_progress:              "push_job_status",
   job_declined:                 "push_job_status",
+  direct_request_declined:      "push_job_status",   // same event as job_declined, direct-request variant
   photo_added:                  "push_job_status",
   quote_expired:                "push_job_status",
   wo_en_route:                  "push_job_status",
@@ -57,6 +58,7 @@ const TYPE_TO_PREF_KEY: Record<string, string> = {
 
   // -- new job / lead --
   new_job_nearby:               "push_new_job",
+  direct_request:               "push_direct_request",
 
   // -- messages --
   new_message:                  "push_new_message",
