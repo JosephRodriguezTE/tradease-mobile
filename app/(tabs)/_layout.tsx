@@ -1,21 +1,13 @@
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CalendarCheck, MapPinned, MessageCircle, Settings as SettingsIcon, User } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '../../hooks/useAuth';
 import { useRole } from '../../hooks/useRole';
 import { useUnreadMessages } from '../../hooks/useUnreadMessages';
-import { supabase } from '../../lib/supabase';
-import TwoFAEnrollSheet from '../../components/TwoFAEnrollSheet';
 import PreLaunchModal from '@/components/PreLaunchModal';
-
-// Must match PreLaunchModal's own internal STORAGE_KEY — read here only to
-// sequence it ahead of the 2FA prompt below, never written from this file.
-const PRELAUNCH_SEEN_KEY = 'tradease_prelaunch_seen_v1';
 
 function TabIcon({ Icon, focused }: { Icon: any; focused: boolean }) {
   const { colors: Colors } = useTheme();
@@ -40,41 +32,6 @@ export default function TabsLayout() {
   const { isContractor, loading: roleLoading } = useRole();
   const { user } = useAuth();
   const { unreadCount } = useUnreadMessages();
-
-  const [enrollVisible, setEnrollVisible] = useState(false);
-  const [userEmail,     setUserEmail]     = useState('');
-
-  // Show the 2FA enrollment prompt once to users who haven't set it up yet
-  useEffect(() => {
-    async function maybePrompt() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Defer to the pre-launch sheet this mount if it hasn't been seen yet —
-      // both are full-screen Modals and must not stack on top of each other.
-      const prelaunchSeen = await AsyncStorage.getItem(PRELAUNCH_SEEN_KEY);
-      if (!prelaunchSeen) return;
-
-      const storageKey = `twofa_prompted:${user.id}`;
-      const alreadyShown = await AsyncStorage.getItem(storageKey);
-      if (alreadyShown) return;
-
-      const { data } = await supabase
-        .from('users')
-        .select('two_factor_enabled')
-        .eq('id', user.id)
-        .single();
-
-      // Only show for customers (users table row exists); contractors have no users row
-      if (data && !data.two_factor_enabled) {
-        await AsyncStorage.setItem(storageKey, '1');
-        setUserEmail(user.email ?? '');
-        // Short delay so the tab UI is fully mounted before the sheet slides up
-        setTimeout(() => setEnrollVisible(true), 800);
-      }
-    }
-    maybePrompt();
-  }, []);
 
   const firstName = (() => {
     const full: string = user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? '';
@@ -187,13 +144,6 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
-
-    <TwoFAEnrollSheet
-      visible={enrollVisible}
-      onClose={() => setEnrollVisible(false)}
-      userEmail={userEmail}
-      onEnabled={() => {}}
-    />
 
     {!roleLoading && (
       <PreLaunchModal
