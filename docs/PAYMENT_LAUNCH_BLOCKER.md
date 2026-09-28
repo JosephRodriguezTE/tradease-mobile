@@ -218,4 +218,14 @@ until all three of these exist — none of them do today:
    `cancelled`) the work-order state machine has no equivalent for at all.
    Not retired, not consolidated this pass — every reader listed would need
    migrating to `work_orders` first, and a pre-work-order-stage mechanism
+4. **`charge-customer/index.ts:20-21` reads `STRIPE_SECRET_KEY` and
+   `SUPABASE_URL` with a bare `Deno.env.get('...')!`** — a compile-time-only
+   assertion that does nothing at runtime. If either var were ever actually
+   unset, this would silently proceed and call Stripe with an undefined
+   key instead of failing at startup. `getServiceKey()` two lines below it
+   (`_shared/secretKey.ts`) already gets this right — throws a clear error
+   immediately if misconfigured, rather than degrading silently. Fix these
+   two lines to match that pattern (throw if missing) as part of whatever
+   change actually wires a caller to this function — not worth a standalone
+   patch to dead code today, but don't let it ship live still using `!`.
    would need to exist before any of the three could safely become a no-op.
