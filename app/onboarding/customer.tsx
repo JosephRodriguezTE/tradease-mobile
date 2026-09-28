@@ -196,17 +196,24 @@ export default function CustomerOnboarding() {
     try {
       const fullAddress = `${streetAddress}, ${city}, ${state} ${zipCode}`;
 
-      const { error } = await supabase.from('users').upsert({
-        id: user.id,
-        email: user.email,
-        full_name: fullName.trim(),
-        phone: phone.trim(),
-        location: county || city,
-        username: user.email?.split('@')[0],
-        role: 'customer',
-      });
+      // The users row is created server-side at signup (on_auth_user_created),
+      // including a collision-safe username -- so this is an update, never an
+      // upsert. The upsert re-sent the bare email local part as username,
+      // which fails with a duplicate error for a user whose username was
+      // suffixed; an upsert without username fails NOT NULL instead.
+      const { data: updated, error } = await supabase.from('users')
+        .update({
+          full_name: fullName.trim(),
+          phone: phone.trim(),
+          location: county || city,
+          role: 'customer',
+        })
+        .eq('id', user.id)
+        .select('id')
+        .maybeSingle();
 
       if (error) throw error;
+      if (!updated) throw new Error('Your profile record is missing. Please contact support.');
 
       // Save address to auth metadata for easy access
       await supabase.auth.updateUser({
