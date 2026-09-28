@@ -1,8 +1,13 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { getServiceKey } from "../_shared/secretKey.ts";
 
-const PRO_PRIORITY_WITHIN_FEATURED = false;
+// Classifies a free-text job search into a trade category (via
+// agent-job-match) for the home tab, which then navigates to Find Contractor
+// with that category. It used to also return a ranked contractor list from
+// get_ranked_contractors() -- via the service-role client -- that no caller
+// ever read (app/(tabs)/index.tsx only destructures { match, agent_failed },
+// in every version since the call was added). Removed along with the
+// service-role client it was the only use of.
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -20,12 +25,10 @@ Deno.serve(async (req: Request) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const anonKey     = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceKey  = getServiceKey();
 
-    const userClient    = createClient(supabaseUrl, anonKey, {
+    const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
-    const serviceClient = createClient(supabaseUrl, serviceKey);
 
     const { data: { user }, error: userError } = await userClient.auth.getUser();
     if (userError || !user) {
@@ -34,7 +37,6 @@ Deno.serve(async (req: Request) => {
 
     const body  = await req.json();
     const query = (body?.query ?? "").toString().trim();
-    const area  = body?.area ?? null;
 
     if (!query) {
       return Response.json({ error: "query is required" }, { status: 400, headers: CORS });
@@ -71,21 +73,8 @@ Deno.serve(async (req: Request) => {
       agentFailed = true;
     }
 
-    // Step 2 — ranked contractors from RPC (server-side random() shuffle)
-    const { data: contractors, error: rpcError } = await serviceClient.rpc(
-      "get_ranked_contractors",
-      {
-        p_category:              match.category,
-        p_area:                  area,
-        p_pro_priority_featured: PRO_PRIORITY_WITHIN_FEATURED,
-      }
-    );
-
-    if (rpcError) console.error("get_ranked_contractors error:", rpcError);
-
     return Response.json({
       match,
-      contractors:  contractors ?? [],
       agent_failed: agentFailed,
     }, { headers: { ...CORS, "Content-Type": "application/json" } });
 
