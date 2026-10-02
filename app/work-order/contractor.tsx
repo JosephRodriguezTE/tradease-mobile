@@ -24,28 +24,9 @@ import { usePrimaryAction } from '@/hooks/usePrimaryAction';
 import { enqueueOffline, flushOfflineQueue } from '@/lib/offlineQueue';
 import { MAPBOX_ACCESS_TOKEN } from '@/lib/mapConfig';
 import { supabase } from '@/lib/supabase';
+import { extractFunctionErrorMessage } from '@/lib/functionErrors';
 
 MapboxGL.setAccessToken(MAPBOX_ACCESS_TOKEN);
-
-// supabase-js's FunctionsHttpError.message is a hardcoded generic string
-// ("Edge Function returned a non-2xx status code") -- it never reads the
-// response body. This project's edge functions (work-order-transition
-// included) return a real, specific { error: "..." } JSON body on every
-// failure; it's only reachable via error.context, the raw Response.
-// Without this, every distinct server-side rejection (no payment hold,
-// payment record not found, wrong payment status, not authorized, etc.)
-// surfaced identically as the same meaningless generic message.
-async function extractFunctionErrorMessage(error: any): Promise<string> {
-  if (error?.context && typeof error.context.json === 'function') {
-    try {
-      const body = await error.context.json();
-      if (body?.error) return body.error;
-    } catch {
-      // context wasn't JSON -- fall through to whatever message we have
-    }
-  }
-  return error?.message ?? 'Could not update status. Try again.';
-}
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 
@@ -981,35 +962,14 @@ function PaymentSection({ pi, basePrice, collapsed, onToggle }: { pi: PaymentInt
 
 // ─── SupportSection ───────────────────────────────────────────────────────────
 
-function SupportSection({ wo, collapsed, onToggle }: { wo: WoData; collapsed: boolean; onToggle: () => void }) {
-  const canDispute = ['awaiting_approval', 'payment_releasing', 'completed'].includes(wo.wo_status);
-  const [disputing, setDisputing] = useState(false);
-
-  async function openDispute() {
-    Alert.alert(
-      'Open a Dispute',
-      'This will notify Tradease and pause payment release. You can describe the issue by email.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Open Dispute', style: 'destructive',
-          onPress: async () => {
-            setDisputing(true);
-            const { data, error } = await supabase.functions.invoke('work-order-dispute', {
-              body: { work_order_id: wo.id, reason: 'Contractor opened dispute' },
-            });
-            setDisputing(false);
-            if (error) { Alert.alert('Error', 'Could not open dispute. Please email support@tradease.app'); return; }
-            if (data?.already_open) {
-              Alert.alert('Dispute Already Open', 'A dispute is already open on this job. Our team is reviewing it.');
-              return;
-            }
-            Alert.alert('Dispute Opened', 'Our team will review within 24 hours.');
-          },
-        },
-      ]
-    );
-  }
+function SupportSection({ wo, collapsed, onToggle, disputing, openDispute }: {
+  wo: WoData; collapsed: boolean; onToggle: () => void; disputing: boolean; openDispute: () => void;
+}) {
+  // work-order-dispute accepts either party, and a job can move to disputed
+  // from mid-work as well as from the post-completion approval window --
+  // matches the overflow menu's "Open Dispute" option for the same statuses.
+  const canDispute = ['in_progress', 'waiting_for_customer', 'materials_needed',
+                       'awaiting_approval', 'payment_releasing', 'completed'].includes(wo.wo_status);
 
   function reportIssue() {
     if (Platform.OS === 'ios') {
@@ -1047,7 +1007,7 @@ function SupportSection({ wo, collapsed, onToggle }: { wo: WoData; collapsed: bo
         <View style={{ flex: 1 }}>
           <Text style={[s.supportLabel, { color: G.red }]}>Open a Dispute</Text>
           <Text style={s.supportSub}>
-            {canDispute ? 'Pause payment and escalate to Tradease' : 'Available after the job is marked complete'}
+            {canDispute ? 'Pause payment and escalate to Tradease' : 'Available once the job is in progress'}
           </Text>
         </View>
         <Ionicons name="chevron-forward" size={16} color={G.txt3} />
@@ -1222,6 +1182,7 @@ export default function ContractorWorkOrderScreen() {
   const [loading,      setLoading]      = useState(true);
   const [transitioning, setTransitioning] = useState(false);
   const [showCO,       setShowCO]       = useState(false);
+  const [disputing,    setDisputing]    = useState(false);
   const [collapsed, setCollapsed] = useState<Set<SectionKey>>(
     new Set(['timeline', 'payment', 'map', 'support'] as SectionKey[])
   );
@@ -1486,6 +1447,37 @@ export default function ContractorWorkOrderScreen() {
   }, [wo]);
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Dispute (shared by SupportSection and the overflow menu -- one
+  // implementation, not two separate dispute flows)
+  // ─────────────────────────────────────────────────────────────────────────
+  const openDispute = useCallback(() => {
+    if (!wo) return;
+    Alert.alert(
+      'Open a Dispute',
+      'This will notify Tradease and pause payment release. You can describe the issue by email.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Open Dispute', style: 'destructive',
+          onPress: async () => {
+            setDisputing(true);
+            const { data, error } = await supabase.functions.invoke('work-order-dispute', {
+              body: { work_order_id: wo.id, reason: 'Contractor opened dispute' },
+            });
+            setDisputing(false);
+            if (error) { Alert.alert('Error', 'Could not open dispute. Please email support@tradease.app'); return; }
+            if (data?.already_open) {
+              Alert.alert('Dispute Already Open', 'A dispute is already open on this job. Our team is reviewing it.');
+              return;
+            }
+            Alert.alert('Dispute Opened', 'Our team will review within 24 hours.');
+          },
+        },
+      ]
+    );
+  }, [wo]);
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Early start request
   // ─────────────────────────────────────────────────────────────────────────
   const requestEarlyStart = useCallback(async () => {
@@ -1513,8 +1505,10 @@ export default function ContractorWorkOrderScreen() {
       opts.push({ text: 'Waiting on Customer', onPress: () => transition('waiting_for_customer') });
       opts.push({ text: 'Need Materials', onPress: () => transition('materials_needed') });
     }
-    const cancelable = ['submitted', 'accepted', 'deposit_secured', 'en_route', 'arrived', 'in_progress',
-                        'waiting_for_customer', 'materials_needed'];
+    // The database has never allowed cancelling once work has started --
+    // Cancel Job already failed server-side during these three statuses.
+    // Limited here to match what the backend actually permits.
+    const cancelable = ['submitted', 'accepted', 'deposit_secured', 'en_route', 'arrived'];
     if (cancelable.includes(wo.wo_status)) {
       opts.push({
         text: 'Cancel Job', style: 'destructive',
@@ -1523,6 +1517,10 @@ export default function ContractorWorkOrderScreen() {
           { text: 'Cancel Job', style: 'destructive', onPress: () => transition('cancelled') },
         ]),
       });
+    } else if (['in_progress', 'waiting_for_customer', 'materials_needed'].includes(wo.wo_status)) {
+      // Work has already started -- cancelling is no longer an option, but
+      // the job can still move to disputed, same as from Help & Support.
+      opts.push({ text: 'Open Dispute', style: 'destructive', onPress: openDispute });
     }
     if (opts.length === 0) return;
     if (Platform.OS === 'ios') {
@@ -1798,6 +1796,8 @@ export default function ContractorWorkOrderScreen() {
             wo={wo!}
             collapsed={collapsed.has('support')}
             onToggle={() => toggleSection('support')}
+            disputing={disputing}
+            openDispute={openDispute}
           />
         );
       default:
