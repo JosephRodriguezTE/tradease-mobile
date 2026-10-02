@@ -68,7 +68,7 @@ function CompanyCard({ contractor, showGlow, onMessage, draftId }: {
   const isVerified  = contractor?.verification_status === 'approved' || contractor?.verified;
   const isTrusted   = !!(
     contractor?.company_name?.trim() &&
-    contractor?.phone?.trim() &&
+    contractor?.has_phone === true &&
     contractor?.location?.trim() &&
     contractor?.avatar_url?.trim() &&
     contractor?.username?.trim()
