@@ -1104,13 +1104,11 @@ export default function ContractorHomeScreen() {
       setVerifyGateOpen(true);
       return;
     }
-    const { data: acceptedBooking, error } = await supabase.rpc('accept_job', {
+    const { data: acceptedBooking, error } = await supabase.rpc('claim_instant_book', {
       p_booking_id: job.id,
-      p_contractor_id: contractor.id,
-      p_contractor_name: contractor.company_name ?? '',
     });
     if (error) {
-      if (error.message?.includes('already taken')) {
+      if (error.message?.includes('already taken') || error.message?.includes('already claimed')) {
         Alert.alert('Job Unavailable', 'This job was already accepted by another contractor.');
       } else {
         Alert.alert('Error', error.message || 'Could not accept job. Try again.');
@@ -1118,7 +1116,7 @@ export default function ContractorHomeScreen() {
       return;
     }
     // job.customer_id isn't available from the public feed (fuzzed, no
-    // customer identity pre-claim) -- accept_job returns the full,
+    // customer identity pre-claim) -- claim_instant_book returns the full,
     // now-assigned booking row, which has it.
     const customerId = (acceptedBooking as any)?.customer_id;
     if (customerId) {

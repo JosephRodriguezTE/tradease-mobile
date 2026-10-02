@@ -424,14 +424,12 @@ export default function JobDetailScreen() {
       return;
     }
     setOfferSaving(true);
-    const { data: acceptedBooking, error } = await supabase.rpc('accept_job', {
+    const { data: acceptedBooking, error } = await supabase.rpc('claim_instant_book', {
       p_booking_id: id as string,
-      p_contractor_id: user.id,
-      p_contractor_name: myContractor?.company_name || '',
     });
     if (error) {
       setOfferSaving(false);
-      if (error.message?.includes('already taken')) {
+      if (error.message?.includes('already taken') || error.message?.includes('already claimed')) {
         Alert.alert('Job Unavailable', 'This job was already accepted by another contractor.');
       } else {
         Alert.alert('Error', error.message || 'Could not accept job.');
@@ -439,7 +437,7 @@ export default function JobDetailScreen() {
       return;
     }
     // booking.customer_id isn't available on the public (isPublicView)
-    // path -- accept_job returns the full, now-assigned booking row,
+    // path -- claim_instant_book returns the full, now-assigned booking row,
     // which has it, whichever path we arrived from.
     const customerId = (acceptedBooking as any)?.customer_id ?? booking.customer_id;
     if (customerId) {
@@ -456,7 +454,7 @@ export default function JobDetailScreen() {
     }
     setOfferSaving(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    // Merge in the real booking accept_job just returned -- on the public
+    // Merge in the real booking claim_instant_book just returned -- on the public
     // path this is the moment the restricted/fuzzed view should give way
     // to full access, since RLS now grants it (contractor_id = auth.uid()).
     setBooking((p: any) => ({
