@@ -9,6 +9,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -235,15 +236,21 @@ export default function WorkOrderChatScreen() {
   async function sendMessage() {
     const text = draft.trim();
     if (!text || !user || !work_order_id || sending) return;
-    setDraft('');
     setSending(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await supabase.from('work_order_messages').insert({
+    // Keep the draft until the insert succeeds -- a failed send used to clear
+    // the box first and say nothing, so the message just vanished.
+    const { error } = await supabase.from('work_order_messages').insert({
       work_order_id,
       sender_id: user.id,
       body: text,
     });
     setSending(false);
+    if (error) {
+      Alert.alert('Message not sent', `${error.message}\n\nYour message is still in the box — try again.`);
+      return;
+    }
+    setDraft(d => (d.trim() === text ? '' : d));
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
   }
 
@@ -265,14 +272,17 @@ export default function WorkOrderChatScreen() {
       const { error: upErr } = await supabase.storage.from('work-orders').upload(path, blob, { contentType: mime });
       if (upErr) throw upErr;
 
-      await supabase.from('work_order_messages').insert({
+      const { error: msgErr } = await supabase.from('work_order_messages').insert({
         work_order_id,
         sender_id: user.id,
         media_path: path,
         body: null,
       });
+      if (msgErr) throw msgErr;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {}
+    } catch (e: any) {
+      Alert.alert('Photo not sent', e?.message ?? 'Could not send the photo. Try again.');
+    }
     setUploading(false);
   }
 
