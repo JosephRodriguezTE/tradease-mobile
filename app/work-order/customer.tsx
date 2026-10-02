@@ -25,6 +25,7 @@ import { supabase } from '@/lib/supabase';
 import { useLocationPermission } from '@/hooks/useLocationPermission';
 import { Type as DesignType } from '@/lib/design/tokens';
 import { paymentProvider } from '@/lib/payment/mock';
+import { extractFunctionErrorMessage } from '@/lib/functionErrors';
 
 MapboxGL.setAccessToken(MAPBOX_ACCESS_TOKEN);
 
@@ -350,7 +351,7 @@ function HeroSection({ wo, eta, onLearnMore, heldCents, hasHold, isMockPayment, 
             <Text style={s.protectedSub}>
               {isApproval
                 ? 'Ready to release — pending your approval below'
-                : wo.wo_status === 'completed'
+                : wo.wo_status === 'completed' || wo.wo_status === 'payment_releasing'
                   ? "Payment capture isn't live yet"
                   : 'Held securely — releases only when you approve'}
             </Text>
@@ -903,25 +904,44 @@ function CompletionSheet({
     if (stars === 0) { Alert.alert('', 'Please rate the contractor before approving.'); return; }
     setPhase('processing');
     try {
-      // 1. Submit review
-      const { error: reviewErr } = await supabase.rpc('submit_review', {
-        p_booking_id:  wo.booking_id,
-        p_rating:      stars,
-        p_review_text: review.trim() || null,
-      });
-      if (reviewErr) throw reviewErr;
+      // A retry after the completed call below already failed once lands
+      // here with wo already at payment_releasing (approved_at is set, the
+      // review was already submitted) -- re-submitting the review fails as
+      // a duplicate, and re-running payment_releasing is just wasted work.
+      // Only the completed call still needs to run.
+      if (wo.wo_status !== 'payment_releasing') {
+        const { error: reviewErr } = await supabase.rpc('submit_review', {
+          p_booking_id:  wo.booking_id,
+          p_rating:      stars,
+          p_review_text: review.trim() || null,
+        });
+        if (reviewErr) throw reviewErr;
 
-      // 2. Transition to completed — payment_releasing first (sets approved_at),
-      // then completed, matching the valid state graph.
-      const { error: releasingErr } = await supabase.functions.invoke('work-order-transition', {
-        body: { work_order_id: wo.id, new_status: 'payment_releasing' },
-      });
-      if (releasingErr) throw releasingErr;
+        // Transition to completed — payment_releasing first (sets approved_at),
+        // then completed, matching the valid state graph.
+        const { error: releasingErr } = await supabase.functions.invoke('work-order-transition', {
+          body: { work_order_id: wo.id, new_status: 'payment_releasing' },
+        });
+        if (releasingErr) throw new Error(await extractFunctionErrorMessage(releasingErr));
+      }
 
       const { error } = await supabase.functions.invoke('work-order-transition', {
         body: { work_order_id: wo.id, new_status: 'completed' },
       });
-      if (error) throw error;
+      if (error) {
+        const message = await extractFunctionErrorMessage(error);
+        // Expected, not a failure: the approval above already went through
+        // (wo is at payment_releasing, approved_at is set) -- this is
+        // validate_work_order_transition()'s deliberate money gate refusing
+        // to mark the job fully "completed" until something actually
+        // captures the payment, which nothing does yet. Treat it as the
+        // terminal success state rather than bouncing back to review.
+        if (message.includes('payment must be captured first')) {
+          setPhase('success');
+          return;
+        }
+        throw new Error(message);
+      }
       setPhase('success');
     } catch (e: any) {
       setPhase('review');
