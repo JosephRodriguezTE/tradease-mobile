@@ -940,10 +940,13 @@ export default function ContractorHomeScreen() {
       Alert.alert('Decline Counter', 'Walk away from this job?', [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Decline', style: 'destructive', onPress: async () => {
-          await supabase
-            .from('job_offers')
-            .update({ status: 'declined', contractor_final: 'declined' })
-            .eq('id', offerId);
+          // Same RPC as accepting (and as the website's decline); the direct
+          // job_offers update it replaces was never checked.
+          const { error } = await supabase.rpc('contractor_respond_counter', {
+            p_offer_id: offerId,
+            p_action: 'declined',
+          });
+          if (error) { Alert.alert('Could not decline', error.message || 'Try again.'); return; }
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
           setActiveOffers(prev => prev.filter(o => o.id !== offerId));
         }},

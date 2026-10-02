@@ -395,15 +395,21 @@ export default function JobDetailScreen() {
       return;
     }
     setOfferSaving(true);
-    const counterExpiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
-    await supabase.from('job_offers').update({
-      status:           'countered',
-      customer_action:  'countered',
-      counter_price:    numPrice,
-      counter_note:     counterNote.trim() || null,
-      counter_expires_at: counterExpiresAt,
-    }).eq('id', offer!.id);
+    // Through customer_respond_offer, like accept/decline: it enforces the
+    // 70% minimum and sets the 2-hour counter window server-side. The old
+    // direct job_offers update skipped both and its result was never checked.
+    const { error } = await supabase.rpc('customer_respond_offer', {
+      p_offer_id:      offer!.id,
+      p_action:        'countered',
+      p_counter_price: numPrice,
+      p_counter_note:  counterNote.trim() || null,
+    });
     setOfferSaving(false);
+    if (error) {
+      Alert.alert('Counter not sent', error.message || 'Could not send your counter offer. Try again.');
+      return;
+    }
+    setOffer((p: any) => ({ ...p, status: 'countered', customer_action: 'countered', counter_price: numPrice }));
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setCounterModalVisible(false);
     setCounterPrice('');
