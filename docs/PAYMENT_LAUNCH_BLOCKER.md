@@ -4,6 +4,24 @@
 resolved, completing a real job in production does not pay the contractor,
 regardless of which app the customer approves from.
 
+> **Read these two first.**
+>
+> 1. **Until Stripe is live, no work order with a payment attached can
+>    complete — on either platform.** Website work orders get a $0
+>    `pending_hold` intent at creation; mobile work orders get a mock `held`
+>    intent when the deposit is secured. Neither can ever be `captured`
+>    (clients can't write capture, and nothing server-side captures yet), so
+>    approval stops at `payment_releasing`. That's correct — nothing was
+>    charged — but it means **the full job lifecycle cannot be demonstrated
+>    end to end until Stripe lands.** Only work orders that never had a
+>    payment attached complete today. Don't "fix" it by relaxing the gate.
+> 2. **`payments_live()` flip ordering: mobile's `securePayment()` must already
+>    be on the real Stripe hold *before* the gate flips to `true`.** The flip
+>    also stops clients creating intents, which is how today's mock hold
+>    works — flip first and securing a deposit breaks the moment it's
+>    switched. Order: ship the real hold (server-created intents) → verify →
+>    flip the gate in the same release that makes capture live.
+
 Written 2026-09-16, from code in both repos. Read alongside
 `docs/PAYMENT_FLOW_STATE.md` (2026-08-30, verified live against `pg_catalog`
 and `cron.job_run_details` — the deeper, DB-confirmed source for the
@@ -229,3 +247,64 @@ until all three of these exist — none of them do today:
    change actually wires a caller to this function — not worth a standalone
    patch to dead code today, but don't let it ship live still using `!`.
    would need to exist before any of the three could safely become a no-op.
+
+## Update — 2026-10-01: client writes guarded, launch gate added
+
+Proven 2026-09-28 with throwaway accounts (rolled back): either party could
+write the money state of their own job directly, so every "captured" or
+"approved" in the database was self-certifiable. Four guard triggers now
+restrict direct client writes (migrations in the website repo,
+`supabase/migrations/20260928_guard_*`); server paths — SECURITY DEFINER
+functions and service-role callers, including `charge-customer` — are
+unaffected.
+
+- **bookings** — no client writes to payment, fee, payout, refund or
+  cancellation-fee columns; status moves are per party (a contractor can't
+  approve their own job, a customer can't complete one). Completing a job no
+  longer flips `payment_status` held → released.
+- **work_orders** — `billing` is always recalculated from `line_items` and
+  can't be written directly (it's what `charge-customer` charges); only the
+  customer can move `awaiting_approval → payment_releasing`; clients can't
+  insert work orders at all.
+- **payment_intents** — clients can only *insert* a mock hold (status
+  `pending_hold`/`held`/`hold_failed`, provider `mock`, for their own
+  booking). No client UPDATE or DELETE: capture, release and refund are
+  server-only. `MockPaymentProvider.capturePayment/releaseHold/refund` have no
+  callers and would now fail — delete them with the Stripe switch.
+- **payment_line_items** — approval is always the customer's. Every
+  contractor-added item starts `pending` (the website's "require customer
+  approval" checkbox no longer has any effect — remove it); auto-approve
+  still applies under the work order's `auto_approve_under_cents`, which
+  clients can't set.
+
+### Launch gate: `public.payments_live()`
+
+Returns `false` today. **Flip it to `true` in the same change that makes real
+capture live** (`CREATE OR REPLACE FUNCTION public.payments_live() RETURNS
+boolean LANGUAGE sql STABLE AS $$ SELECT true $$;`). It controls two things:
+
+1. **Completion without a payment.** While `false`, a work order that has
+   *never* had a payment (no `payment_intent_id`, no `stripe_payment_intent_id`,
+   no `payment_intents` row for its booking) may complete without one —
+   nothing can be captured pre-launch. While `true`, every completion needs a
+   captured payment. A work order that has had a payment always needs it
+   captured, either way.
+2. **Client-created holds.** While `false`, the customer's app may insert the
+   mock hold. While `true`, payment intents come from the server only — so
+   mobile's `securePayment()` must already be on the real Stripe hold before
+   the flip, or securing a deposit breaks.
+
+### Work orders stop at `payment_releasing` until Stripe is real — correct, expected
+
+- **Website-created work orders** are created with a $0 `pending_hold`
+  placeholder intent (open decision 1 above), so they have "had a payment".
+  The website approve path moves them to `payment_releasing`, then the
+  `completed` write fails with "payment must be captured first" and the work
+  order rests there. Correct behaviour: nothing was captured.
+- **Mobile work orders with a secured deposit** behave the same way: the mock
+  hold is `held`, never `captured`, and clients can no longer capture it, so
+  mobile approval also stops at `payment_releasing`.
+- Only work orders that never had a payment attached complete today.
+
+Nothing completes a paid work order until `charge-customer` is wired and
+Stripe is live. Don't "fix" this by relaxing the gate.
