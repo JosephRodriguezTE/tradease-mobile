@@ -1019,7 +1019,8 @@ function CustomerProfileView({ profile, bookingStats }: { profile: any; bookingS
       if (error) throw error;
       const { data } = supabase.storage.from('avatars').getPublicUrl(path);
       const url = `${data.publicUrl}?t=${Date.now()}`;
-      await supabase.from('users').update({ avatar_url: url }).eq('id', user!.id);
+      const { error: saveErr } = await supabase.from('users').update({ avatar_url: url }).eq('id', user!.id);
+      if (saveErr) throw saveErr;
       setAvatarUrl(url);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {

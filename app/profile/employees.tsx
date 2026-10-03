@@ -190,7 +190,8 @@ export default function EmployeesScreen() {
         { text: 'Cancel', style: 'cancel' },
         { text: 'Deactivate', style: 'destructive', onPress: async () => {
           setActionTarget(null);
-          await supabase.from('contractor_employees').update({ status: 'inactive' }).eq('id', emp.id);
+          const { error } = await supabase.from('contractor_employees').update({ status: 'inactive' }).eq('id', emp.id);
+          if (error) Alert.alert('Not deactivated', `${emp.full_name} still has access: ${error.message}`);
           load();
         }},
       ],
@@ -200,7 +201,11 @@ export default function EmployeesScreen() {
   async function handleResendInvite(emp: Employee) {
     setActionTarget(null);
     const token = emp.invite_token ?? Math.random().toString(36).slice(2, 18);
-    await supabase.from('contractor_employees').update({ invite_token: token, invited_at: new Date().toISOString() }).eq('id', emp.id);
+    const { error } = await supabase.from('contractor_employees').update({ invite_token: token, invited_at: new Date().toISOString() }).eq('id', emp.id);
+    if (error) {
+      Alert.alert('Invite not resent', `Couldn't refresh the invite link: ${error.message}`);
+      return;
+    }
     const link = `tradease://invite/${token}`;
     Alert.alert(
       'Invite Link',
@@ -352,6 +357,7 @@ export default function EmployeesScreen() {
                 {/* Action button */}
                 <TouchableOpacity
                   style={s.moreBtn}
+                  accessibilityLabel={`Options for ${item.full_name}`}
                   onPress={() => setActionTarget(item)}
                 >
                   <Ionicons name="ellipsis-vertical" size={18} color={C.textMuted} />

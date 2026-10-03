@@ -201,8 +201,10 @@ export default function PortfolioScreen() {
   const deletePhoto = useCallback(async (item: PortfolioItem) => {
     setDeletingId(item.id);
     try {
+      // Row first: if it fails the photo stays listed and the file stays put.
+      const { error } = await supabase.from('contractor_portfolio').delete().eq('id', item.id);
+      if (error) throw error;
       await supabase.storage.from('portfolio').remove([item.storage_path]);
-      await supabase.from('contractor_portfolio').delete().eq('id', item.id);
       setPhotos(prev => prev.filter(p => p.id !== item.id));
       setViewerItem(null);
     } catch (e: any) {
@@ -261,9 +263,14 @@ export default function PortfolioScreen() {
     setPickedId(null);
 
     // Persist new order
-    await Promise.all(
+    const results = await Promise.all(
       withOrder.map(p => supabase.from('contractor_portfolio').update({ sort_order: p.sort_order }).eq('id', p.id))
     );
+    const failed = results.find(r => r.error);
+    if (failed) {
+      setPhotos(photos);
+      Alert.alert('Order not saved', failed.error!.message);
+    }
   };
 
   const openViewer = (item: PortfolioItem) => {

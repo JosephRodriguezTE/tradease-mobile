@@ -464,11 +464,11 @@ function ChecklistSection({
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Apply', onPress: async () => {
-          for (let i = 0; i < tpl.length; i++) {
-            await supabase.from('work_progress_items').insert({
-              work_order_id: woId, label: tpl[i], sort_order: (items.length + i),
-            });
-          }
+          // One insert so it lands all-or-nothing; realtime refreshes the list.
+          const { error } = await supabase.from('work_progress_items').insert(
+            tpl.map((label, i) => ({ work_order_id: woId, label, sort_order: items.length + i })),
+          );
+          if (error) Alert.alert('Template not applied', error.message);
         },
       },
     ]);

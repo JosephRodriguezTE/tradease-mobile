@@ -148,8 +148,9 @@ function ContractorEditForm() {
     setUploadingAvatar(true);
     const url = await uploadAvatar(user!.id, result.assets[0].uri);
     if (url) {
-      setAvatarUrl(url);
-      await supabase.from('contractors').update({ avatar_url: url }).eq('id', user!.id);
+      const { error: saveErr } = await supabase.from('contractors').update({ avatar_url: url }).eq('id', user!.id);
+      if (saveErr) Alert.alert('Photo not saved', `Uploaded, but your profile wasn't updated: ${saveErr.message}`);
+      else setAvatarUrl(url);
     } else {
       Alert.alert('Upload failed', 'Could not save photo. Check your connection and try again.');
     }
@@ -394,8 +395,9 @@ function CustomerEditForm() {
     setUploadingAvatar(true);
     const url = await uploadAvatar(user!.id, result.assets[0].uri);
     if (url) {
-      setAvatarUrl(url);
-      await supabase.from('users').update({ avatar_url: url }).eq('id', user!.id);
+      const { error: saveErr } = await supabase.from('users').update({ avatar_url: url }).eq('id', user!.id);
+      if (saveErr) Alert.alert('Photo not saved', `Uploaded, but your profile wasn't updated: ${saveErr.message}`);
+      else setAvatarUrl(url);
     } else {
       Alert.alert('Upload failed', 'Could not save photo. Check your connection and try again.');
     }
