@@ -274,7 +274,8 @@ function CustomerBookings() {
       {
         text: 'Delete', style: 'destructive',
         onPress: async () => {
-          await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', bookingId);
+          const { error } = await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', bookingId);
+          if (error) { Alert.alert('Could not delete job', error.message); return; }
           setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'cancelled' } : b));
         },
       },

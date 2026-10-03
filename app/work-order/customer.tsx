@@ -1258,6 +1258,20 @@ export default function CustomerWorkOrderScreen() {
     Alert.alert('Declined', 'Your contractor has been notified. The original start time is kept.');
   }, []);
 
+  // Shared by the realtime popup and the banner. Both used to fire the call
+  // and ignore the result (the banner then showed "approved" regardless).
+  const approveEarlyStart = useCallback(async (workOrderId: string) => {
+    const { data, error } = await supabase.functions.invoke('work-order-transition', {
+      body: { work_order_id: workOrderId, new_status: 'early_start_approve' },
+    });
+    if (error || !data?.success) {
+      const reason = error ? await extractFunctionErrorMessage(error) : (data?.error ?? 'Try again.');
+      Alert.alert('Could not approve early start', reason);
+      return;
+    }
+    setWo(prev => prev ? { ...prev, early_start_approved: true } : prev);
+  }, []);
+
   // ─────────────────────────────────────────────────────────────────────────
   // Realtime
   // ─────────────────────────────────────────────────────────────────────────
@@ -1293,11 +1307,7 @@ export default function CustomerWorkOrderScreen() {
                 { text: 'Decline', style: 'cancel', onPress: () => declineEarlyStart(updated.id) },
                 {
                   text: 'Approve',
-                  onPress: async () => {
-                    await supabase.functions.invoke('work-order-transition', {
-                      body: { work_order_id: updated.id, new_status: 'early_start_approve' },
-                    });
-                  },
+                  onPress: () => { void approveEarlyStart(updated.id); },
                 },
               ]
             );
@@ -1799,12 +1809,7 @@ export default function CustomerWorkOrderScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[s.earlyStartBannerBtn, { flex: 1, backgroundColor: 'rgba(34,197,94,0.1)', borderColor: 'rgba(34,197,94,0.3)' }]}
-              onPress={async () => {
-                await supabase.functions.invoke('work-order-transition', {
-                  body: { work_order_id: wo.id, new_status: 'early_start_approve' },
-                });
-                setWo(prev => prev ? { ...prev, early_start_approved: true } : prev);
-              }}
+              onPress={() => { void approveEarlyStart(wo.id); }}
               accessibilityRole="button"
               accessibilityLabel="Approve early start"
             >
