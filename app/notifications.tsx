@@ -185,15 +185,19 @@ export default function NotificationsScreen() {
     if (!user) return;
     setSavingDraft(true);
     const d = notif.data ?? {};
-    try {
-      await supabase.from('bookings').insert({
-        customer_id:  user.id,
-        trade:        d.trade  ?? '',
-        description:  d.description ?? '',
-        status:       'draft',
-      });
-    } catch (_) {}
+    // Said "Draft saved" whatever happened; Supabase returns errors rather
+    // than throwing, so the try/catch it used never caught anything.
+    const { error } = await supabase.from('bookings').insert({
+      customer_id:  user.id,
+      trade:        d.trade  ?? '',
+      description:  d.description ?? '',
+      status:       'draft',
+    });
     setSavingDraft(false);
+    if (error) {
+      Alert.alert('Draft not saved', error.message);
+      return;
+    }
     setCancelActionNotif(null);
     Alert.alert('Draft saved', 'Your job was saved as a draft in My Bookings.');
   }

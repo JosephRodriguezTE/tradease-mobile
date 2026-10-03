@@ -459,10 +459,16 @@ export default function GetVerifiedScreen() {
 
       if (upsertErr) throw upsertErr;
 
-      await supabase
+      // The documents are filed at this point; this flips the contractor into
+      // the review queue. It was unchecked, so a failure still showed success
+      // while the contractor never reached admins' queue.
+      const { error: statusErr } = await supabase
         .from('contractors')
         .update({ verification_status: 'pending_review', years_in_business: parseInt(yearsInBusiness) || null })
         .eq('id', uid);
+      if (statusErr) {
+        throw new Error(`Your documents were uploaded, but we couldn't submit them for review (${statusErr.message}). Please tap Submit again.`);
+      }
 
       setStep(TOTAL_STEPS); // success
     } catch (err: any) {

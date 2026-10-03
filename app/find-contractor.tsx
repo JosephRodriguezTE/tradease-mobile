@@ -51,12 +51,19 @@ function CompanyCard({ contractor, showGlow, onMessage, draftId }: {
   // an app background/kill between here and finishing the job card.
   async function selectContractor() {
     if (draftId) {
-      try {
-        await supabase
-          .from('bookings')
-          .update({ contractor_id: contractor.id, contractor_name: contractor.company_name, request_mode: 'direct' })
-          .eq('id', draftId);
-      } catch {}
+      // Still best-effort (the company page's Book button passes ?contractor=
+      // either way), but no longer silent: tell the user their saved draft
+      // didn't pick this contractor up.
+      const { error } = await supabase
+        .from('bookings')
+        .update({ contractor_id: contractor.id, contractor_name: contractor.company_name, request_mode: 'direct' })
+        .eq('id', draftId);
+      if (error) {
+        Alert.alert(
+          "Draft not updated",
+          `We couldn't add ${contractor.company_name ?? 'this contractor'} to your saved draft (${error.message}). You can still book them from their page.`,
+        );
+      }
     }
     router.push(`/company/${contractor.id}${draftId ? `?draftId=${draftId}` : ''}` as any);
   }

@@ -466,13 +466,18 @@ export default function CreateJobScreen() {
         request_mode:    'direct',
       } : {}),
     };
+    // Both paths report failure: the update used to return draftId whether or
+    // not it saved, and a failed insert returned null with no message, so
+    // "Save as Draft" silently did nothing.
     if (draftId) {
-      await supabase.from('bookings').update(payload).eq('id', draftId);
+      const { error: updErr } = await supabase.from('bookings').update(payload).eq('id', draftId);
+      if (updErr) { Alert.alert('Draft not saved', updErr.message); return null; }
       return draftId;
     }
     const { data, error } = await supabase.from('bookings').insert(payload).select().single();
-    if (!error && data) { setDraftId(data.id); return data.id as string; }
-    return null;
+    if (error || !data) { Alert.alert('Draft not saved', error?.message ?? 'Please try again.'); return null; }
+    setDraftId(data.id);
+    return data.id as string;
   };
 
   // Handles back navigation — prompts to save when leaving with selections
@@ -494,9 +499,10 @@ export default function CreateJobScreen() {
       {
         text: 'Save Draft', onPress: async () => {
           setSaving(true);
-          await saveDraft();
+          const id = await saveDraft();
           setSaving(false);
-          router.replace('/(tabs)/jobs' as any);
+          // Stay on the screen if it didn't save (saveDraft already alerted).
+          if (id) router.replace('/(tabs)/jobs' as any);
         },
       },
       { text: 'Keep Editing', style: 'cancel' },
