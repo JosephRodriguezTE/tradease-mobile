@@ -24,6 +24,7 @@ type EmailType =
   | 'review_received'
   | 'launch_signup_confirmation'
   | 'payment_approved'
+  | 'report_submitted'
 
 // Postgres callers (send_email(), charge-customer) send `template` instead
 // of `type` and don't pass `subject` at all — DEFAULT_SUBJECTS below covers
@@ -53,6 +54,7 @@ const DEFAULT_SUBJECTS: Partial<Record<EmailType, string>> = {
   payment_approved: 'Payment approved — funds on the way',
   verification_approved: 'Your verification was approved',
   verification_rejected: 'Verification update needed',
+  report_submitted: 'New report on Tradease',
 }
 
 const CORS_HEADERS = {
@@ -393,6 +395,17 @@ function buildEmailHtml(payload: EmailPayload): string {
         </a>
       `)
     }
+
+    // To the support inbox (report_inbox()), from notify_report_submitted.
+    case 'report_submitted':
+      return wrapper(`
+        <h1 style="font-size:22px;font-weight:800;margin:0 0 8px;color:#F0F0F0;">New report: ${escapeHtml(data.topic ?? 'Other')}</h1>
+        <p style="color:#9A9A9A;margin:0 0 16px;">From ${escapeHtml(data.name ?? 'unknown')}${data.email ? ` &lt;${escapeHtml(data.email)}&gt;` : ''}</p>
+        <div style="background:#111;border:1px solid #2E2E2E;border-radius:10px;padding:16px;margin:0 0 24px;color:#F0F0F0;font-size:14px;white-space:pre-wrap;">${escapeHtml(data.message ?? '')}</div>
+        <a href="${escapeHtml(data.adminUrl ?? 'https://tradease.tech/admin/reports')}" style="display:inline-block;background:#FF6200;color:#fff;text-decoration:none;border-radius:10px;padding:12px 24px;font-weight:700;font-size:14px;">
+          Open in Admin →
+        </a>
+      `)
 
     default:
       return wrapper(`
