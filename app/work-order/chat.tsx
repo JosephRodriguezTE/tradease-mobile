@@ -1,6 +1,8 @@
 // app/work-order/chat.tsx
-// Work order chat — Phase 3
-// Unlimited messages, open from quote accepted through completion + 30 days archived.
+// Work order chat — the customer/contractor pair's thread in `messages`, the
+// same thread the website's job chat shows (it used to live in
+// work_order_messages, which nothing else read and which notified no one).
+// Photos are stored in the work-orders bucket and referenced by media_path.
 
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -24,6 +26,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { deriveChatId } from '@/lib/messageService';
 import { HammerLoader } from '@/components/HammerLoader';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
@@ -45,15 +48,21 @@ const C = {
 
 interface WoMessage {
   id: string;
-  work_order_id: string;
+  chat_id: string;
   sender_id: string;
   body: string | null;
   media_path: string | null;
   created_at: string;
   read_at: string | null;
   deleted_at: string | null;
-  _sender_name?: string;
 }
+
+// messages.body is NOT NULL and push previews read it, so a photo carries
+// this placeholder; the bubble shows the photo instead of the text.
+export const PHOTO_BODY = '📷 Photo';
+const MESSAGE_COLUMNS = 'id, chat_id, sender_id, body, media_path, created_at, read_at, deleted_at';
+
+interface Thread { chatId: string; otherId: string; myRole: 'customer' | 'contractor'; myName: string }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -94,7 +103,7 @@ function Bubble({ msg, isMe, publicUrl }: { msg: WoMessage; isMe: boolean; publi
         {publicUrl ? (
           <Image source={{ uri: publicUrl }} style={styles.mediaThumb} resizeMode="cover" />
         ) : null}
-        {msg.body ? (
+        {msg.body && !(msg.media_path && msg.body === PHOTO_BODY) ? (
           <Text style={[styles.bubbleText, isMe ? styles.bubbleTextMe : styles.bubbleTextThem]}>
             {msg.body}
           </Text>
@@ -123,6 +132,7 @@ export default function WorkOrderChatScreen() {
   const [uploading,  setUploading]  = useState(false);
   const [otherName,  setOtherName]  = useState('');
   const [publicUrls, setPublicUrls] = useState<Record<string, string>>({});
+  const [thread,     setThread]     = useState<Thread | null>(null);
 
   const listRef = useRef<FlatList>(null);
 
@@ -137,15 +147,21 @@ export default function WorkOrderChatScreen() {
       .eq('id', work_order_id)
       .maybeSingle();
 
-    if (wo) {
-      const isContractor = wo.contractor_id === user.id;
-      setOtherName(isContractor ? (wo.customer_name ?? 'Customer') : (wo.contractor_name ?? 'Contractor'));
-    }
+    if (!wo) { setLoading(false); return; }
+    const isContractor = wo.contractor_id === user.id;
+    setOtherName(isContractor ? (wo.customer_name ?? 'Customer') : (wo.contractor_name ?? 'Contractor'));
+    const chatId = deriveChatId(wo.customer_id, wo.contractor_id);
+    setThread({
+      chatId,
+      otherId: isContractor ? wo.customer_id : wo.contractor_id,
+      myRole:  isContractor ? 'contractor' : 'customer',
+      myName:  (isContractor ? wo.contractor_name : wo.customer_name) ?? (isContractor ? 'Contractor' : 'Customer'),
+    });
 
     const { data } = await supabase
-      .from('work_order_messages')
-      .select('*')
-      .eq('work_order_id', work_order_id)
+      .from('messages')
+      .select(MESSAGE_COLUMNS)
+      .eq('chat_id', chatId)
       .is('deleted_at', null)
       .order('created_at', { ascending: true });
 
@@ -162,13 +178,10 @@ export default function WorkOrderChatScreen() {
     }
     setPublicUrls(urls);
 
-    // Stamp read_at on unread messages from the other party
-    const unread = msgs.filter(m => !m.read_at && m.sender_id !== user.id);
-    if (unread.length > 0) {
-      await supabase
-        .from('work_order_messages')
-        .update({ read_at: new Date().toISOString() })
-        .in('id', unread.map(m => m.id));
+    // Mark what the other party sent as read. A direct update can't do it --
+    // only a message's sender may write the row -- so mark_chat_read() does.
+    if (msgs.some(m => !m.read_at && m.sender_id !== user.id)) {
+      await supabase.rpc('mark_chat_read', { p_chat_id: chatId });
     }
 
     setLoading(false);
@@ -178,9 +191,10 @@ export default function WorkOrderChatScreen() {
 
   // ── Realtime subscription ─────────────────────────────────────────────────
   useEffect(() => {
-    if (!work_order_id || !user) return;
+    if (!thread || !user) return;
+    const { chatId } = thread;
 
-    const channelName = `wo_chat_${work_order_id}`;
+    const channelName = `wo_chat_${chatId}`;
 
     // Purge any stale channel with the same name before subscribing.
     // React StrictMode double-invokes effects; Supabase throws if .on() is
@@ -194,7 +208,7 @@ export default function WorkOrderChatScreen() {
       .channel(channelName)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'work_order_messages', filter: `work_order_id=eq.${work_order_id}` },
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` },
         async (payload) => {
           const msg = payload.new as WoMessage;
           setMessages(prev => {
@@ -210,10 +224,7 @@ export default function WorkOrderChatScreen() {
 
           // Auto-stamp read if the message is from the other party
           if (msg.sender_id !== user.id) {
-            await supabase
-              .from('work_order_messages')
-              .update({ read_at: new Date().toISOString() })
-              .eq('id', msg.id);
+            await supabase.rpc('mark_chat_read', { p_chat_id: chatId, p_message_id: msg.id });
           }
 
           setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
@@ -221,29 +232,32 @@ export default function WorkOrderChatScreen() {
       )
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'work_order_messages', filter: `work_order_id=eq.${work_order_id}` },
+        { event: 'UPDATE', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` },
         (payload) => {
           const updated = payload.new as WoMessage;
-          setMessages(prev => prev.map(m => m.id === updated.id ? updated : m));
+          setMessages(prev => prev.map(m => m.id === updated.id ? { ...m, ...updated } : m));
         }
       )
       .subscribe();
 
     return () => { supabase.removeChannel(ch); };
-  }, [work_order_id, user]);
+  }, [thread, user]);
 
   // ── Send text message ─────────────────────────────────────────────────────
   async function sendMessage() {
     const text = draft.trim();
-    if (!text || !user || !work_order_id || sending) return;
+    if (!text || !user || !thread || sending) return;
     setSending(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     // Keep the draft until the insert succeeds -- a failed send used to clear
     // the box first and say nothing, so the message just vanished.
-    const { error } = await supabase.from('work_order_messages').insert({
-      work_order_id,
-      sender_id: user.id,
-      body: text,
+    const { error } = await supabase.from('messages').insert({
+      chat_id:      thread.chatId,
+      sender_id:    user.id,
+      recipient_id: thread.otherId,
+      sender_name:  thread.myName,
+      sender_role:  thread.myRole,
+      body:         text,
     });
     setSending(false);
     if (error) {
@@ -259,7 +273,7 @@ export default function WorkOrderChatScreen() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) return;
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
-    if (result.canceled || !result.assets[0] || !user || !work_order_id) return;
+    if (result.canceled || !result.assets[0] || !user || !work_order_id || !thread) return;
 
     setUploading(true);
     try {
@@ -272,11 +286,14 @@ export default function WorkOrderChatScreen() {
       const { error: upErr } = await supabase.storage.from('work-orders').upload(path, blob, { contentType: mime });
       if (upErr) throw upErr;
 
-      const { error: msgErr } = await supabase.from('work_order_messages').insert({
-        work_order_id,
-        sender_id: user.id,
-        media_path: path,
-        body: null,
+      const { error: msgErr } = await supabase.from('messages').insert({
+        chat_id:      thread.chatId,
+        sender_id:    user.id,
+        recipient_id: thread.otherId,
+        sender_name:  thread.myName,
+        sender_role:  thread.myRole,
+        body:         PHOTO_BODY,
+        media_path:   path,
       });
       if (msgErr) throw msgErr;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

@@ -174,11 +174,10 @@ export async function markChatRead(chatId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
 
-  await supabase
-    .from('messages')
-    .update({ read: true })
-    .eq('chat_id', chatId)
-    .neq('sender_id', user.id);
+  // Only a message's sender may write its row, so a direct update here was
+  // always rejected and unread counts never cleared; the RPC marks the
+  // caller's received messages read.
+  await supabase.rpc('mark_chat_read', { p_chat_id: chatId });
 }
 
 // ─── Realtime ─────────────────────────────────────────────────────────────────

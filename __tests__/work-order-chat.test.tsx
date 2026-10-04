@@ -28,12 +28,16 @@ jest.mock('@/lib/supabase', () => {
   const result = { data: [], error: null };
   const chain: any = {};
   for (const m of ['select', 'eq', 'is', 'order', 'in', 'update']) chain[m] = () => chain;
-  chain.maybeSingle = () => Promise.resolve({ data: null, error: null });
+  // The work order: this user (u1) is its contractor.
+  chain.maybeSingle = () => Promise.resolve({
+    data: { contractor_id: 'u1', customer_id: 'c1', contractor_name: 'Ace Plumbing', customer_name: 'Jane S.' }, error: null,
+  });
   chain.then = (resolve: (v: unknown) => unknown) => Promise.resolve(result).then(resolve);
   const channel: any = { on: () => channel, subscribe: () => channel };
   return {
     supabase: {
-      from: () => ({ ...chain, insert: (...args: unknown[]) => mockInsert(...args) }),
+      from: (table: string) => ({ ...chain, insert: (row: unknown) => mockInsert(table, row) }),
+      rpc: () => Promise.resolve({ data: 0, error: null }),
       storage: { from: () => ({ createSignedUrl: () => Promise.resolve({ data: null }) }) },
       getChannels: () => [],
       channel: () => channel,
@@ -76,5 +80,10 @@ test('successful send: no alert, draft clears', async () => {
 
   await waitFor(() => expect(screen.getByPlaceholderText('Message…').props.value).toBe(''));
   expect(Alert.alert).not.toHaveBeenCalled();
-  expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({ work_order_id: 'wo1', sender_id: 'u1', body: 'On my way' }));
+  // Goes to the pair's thread in messages -- the one the website shows and
+  // the one whose triggers push the other party -- not work_order_messages.
+  expect(mockInsert).toHaveBeenCalledWith('messages', expect.objectContaining({
+    chat_id: 'c1_u1', sender_id: 'u1', recipient_id: 'c1', sender_role: 'contractor',
+    sender_name: 'Ace Plumbing', body: 'On my way',
+  }));
 });
