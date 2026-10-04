@@ -315,49 +315,32 @@ export function QuoteBottomSheet({ booking, contractorId, visible, onClose, onSe
     setLoading(true);
     setError('');
 
-    const { data: existing } = await supabase
-      .from('job_offers')
-      .select('id')
-      .eq('booking_id', booking.id)
-      .eq('contractor_id', contractorId)
-      .in('status', ['pending', 'quoted', 'countered'])
-      .maybeSingle();
-
-    if (existing) {
-      setError('You already have an active quote on this job.');
-      setLoading(false);
-      return;
-    }
-
     const slot = TIME_SLOTS.find(s => s.id === timeSlot)!;
     const dateLabel = new Date(scheduledAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
     const timeLabel = `${slot.label} (${slot.range}) · ${dateLabel}`;
-    const expiresAt = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();
 
-    const { error: err } = await supabase.from('job_offers').insert({
-      booking_id:       booking.id,
-      contractor_id:    contractorId,
-      quoted_price:     numPrice,
-      quote_note:       note.trim() || null,
-      status:           'quoted',
-      customer_action:  'pending',
-      contractor_final: 'pending',
-      expires_at:       expiresAt,
-      scheduled_at:     scheduledAt,
-      booking_time:     timeLabel,
+    // submit_quote() is the only quote path (same as the website): it checks
+    // the job is still open, that this contractor hasn't already quoted it and
+    // that no other contractor's quote is live, sets the 24h expiry, and
+    // notifies the customer.
+    const { error: err } = await supabase.rpc('submit_quote', {
+      p_booking_id:     booking.id,
+      p_quoted_price:   numPrice,
+      p_quote_note:     note.trim() || null,
+      p_scheduled_at:   scheduledAt,
+      p_booking_time:   timeLabel,
     });
 
-    if (err) { setLoading(false); setError('Could not send quote. Try again.'); return; }
-
-    // Notify customer
-    if ((booking as any).customer_id) {
-      await supabase.from('notifications').insert({
-        user_id: (booking as any).customer_id,
-        type:    'quote_received',
-        title:   'Quote Received',
-        message: `A contractor quoted $${numPrice.toLocaleString()} for your ${booking.trade} job.`,
-        data:    { booking_id: booking.id },
-      });
+    if (err) {
+      setLoading(false);
+      const msg = err.message ?? '';
+      setError(
+        msg.includes('already submitted') ? 'You already have an active quote on this job.'
+          : msg.includes('another contractor') ? 'Another contractor has already quoted this job.'
+          : msg.includes('no longer available') ? 'This job is no longer available.'
+          : `Could not send quote: ${msg || 'try again.'}`,
+      );
+      return;
     }
 
     setLoading(false);
