@@ -13,6 +13,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
 import { supabase } from '@/lib/supabase';
+import { fetchPublicContractors } from '@/lib/contractorsPublic';
 import { formatRemaining } from '@/lib/time';
 import ContractorJobFeed from './contractor-home';
 
@@ -197,11 +198,15 @@ function CustomerBookings() {
     if (!user?.id) { setLoading(false); return; }
     const { data } = await supabase
       .from('bookings')
-      .select('id, trade, description, status, price_estimate, created_at, scheduled_at, booking_time, contractor_id, request_mode, request_expires_at, contractor:contractor_id(company_name, avatar_url)')
+      .select('id, trade, description, status, price_estimate, created_at, scheduled_at, booking_time, contractor_id, request_mode, request_expires_at')
       .eq('customer_id', user.id)
       .order('created_at', { ascending: false });
 
-    const rows = data ?? [];
+    // Contractor name/avatar from contractors_public -- customers can't read
+    // the contractors table, so an embed here was always null.
+    const contractorsById = await fetchPublicContractors<{ id: string; company_name: string | null; avatar_url: string | null }>(
+      (data ?? []).map(b => b.contractor_id), 'id, company_name, avatar_url');
+    const rows = (data ?? []).map(b => ({ ...b, contractor: (b.contractor_id && contractorsById[b.contractor_id]) || null }));
     const approvedIds = rows
       .filter(b => ['approved', 'paid'].includes(b.status))
       .map(b => b.id);

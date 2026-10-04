@@ -30,6 +30,7 @@ import { Type as DesignType, Spacing as DesignSpacing, TouchTarget } from '../..
 import { deriveChatId } from '../../lib/messageService';
 import { formatRemaining, formatReopensIn } from '../../lib/time';
 import { supabase } from '../../lib/supabase';
+import { fetchPublicContractors } from '../../lib/contractorsPublic';
 import { QuoteBottomSheet } from '../(tabs)/contractor-home';
 
 const { width } = Dimensions.get('window');
@@ -204,11 +205,18 @@ function CompanyCard({ contractor }: { contractor: any }) {
 }
 
 // Only what this screen renders. customer_phone, job_lat/lng and photo_urls
-// are read by postAgain() itself, at repost time.
+// are read by postAgain() itself, at repost time. The contractor card comes
+// from contractors_public (attachContractor) -- an embed on the contractors
+// table is always null for customers.
 const BOOKING_SELECT = `id, customer_id, contractor_id, customer_name, contractor_name, status, trade, description, notes,
   price_estimate, booking_time, scheduled_at, request_mode, request_expires_at, is_instant_book, instant_book_price,
-  town, nearest_major_road, before_photos, after_photos,
-  contractor:contractor_id (id, company_name, trade_type, avatar_url, rating, phone, tagline, description, username, plan, verification_status, verified, insured, license_verified, specializations, is_available, total_bookings, review_count, location)`;
+  town, nearest_major_road, before_photos, after_photos`;
+
+async function attachContractor<T extends { contractor_id?: string | null }>(row: T | null): Promise<(T & { contractor: any }) | null> {
+  if (!row) return null;
+  const byId = await fetchPublicContractors([row.contractor_id]);
+  return { ...row, contractor: (row.contractor_id && byId[row.contractor_id]) || null };
+}
 
 export default function JobDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -246,7 +254,7 @@ export default function JobDetailScreen() {
         .eq('id', id)
         .maybeSingle();
 
-      let bookingData: any = fullBooking ?? null;
+      let bookingData: any = await attachContractor(fullBooking ?? null);
 
       // RLS grants SELECT on bookings only to the customer or the
       // assigned contractor (verified live against the actual policy: a
@@ -280,13 +288,13 @@ export default function JobDetailScreen() {
 
       const { data: offerData } = await supabase
         .from('job_offers')
-        .select('*, contractor:contractor_id(id, company_name, trade_type, avatar_url, rating, phone, tagline, username, plan, verification_status, verified, insured, specializations, location)')
+        .select('*')
         .eq('booking_id', id)
         .in('status', ['quoted', 'countered', 'accepted', 'declined'])
         .order('offered_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      setOffer(offerData ?? null);
+      setOffer(await attachContractor(offerData ?? null));
 
       setLoading(false);
     }
@@ -312,7 +320,11 @@ export default function JobDetailScreen() {
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'job_offers',
         filter: `booking_id=eq.${id}`,
-      }, ({ new: updated }) => { setOffer(updated as any); })
+      }, ({ new: updated }) => {
+        // Merge: the payload has job_offers' own columns, not the attached
+        // contractor card.
+        setOffer((p: any) => (p && p.id === (updated as any).id ? { ...p, ...updated } : updated));
+      })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [id]);
@@ -515,7 +527,7 @@ export default function JobDetailScreen() {
     }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     // Accepted: the full row (address, notes, full name) is now visible.
-    const { data: full } = await supabase.from('bookings').select(BOOKING_SELECT).eq('id', id).maybeSingle();
+    const full = await attachContractor((await supabase.from('bookings').select(BOOKING_SELECT).eq('id', id).maybeSingle()).data);
     setBooking((p: any) => full
       ? { ...full, isPreview: false }
       : { ...p, ...(acceptedBooking ?? {}), status: 'confirmed', isPreview: false });
@@ -589,17 +601,9 @@ export default function JobDetailScreen() {
         p_reason: 'customer_cancelled',
       });
       if (error) throw error;
-
-      // Notify assigned contractor when customer cancels
-      if (booking.contractor?.id) {
-        await supabase.from('notifications').insert({
-          user_id: booking.contractor.id,
-          type:    'booking_cancelled',
-          title:   'Job Cancelled',
-          message: `A customer cancelled their ${booking.trade ?? 'job'} booking.`,
-          data:    { booking_id: booking.id },
-        });
-      }
+      // The contractor is notified by the database (job_cancelled, from
+      // notify_booking_status_supplemental). A client insert here was always
+      // rejected -- you can only create notifications for yourself.
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setCancelModalVisible(false);
