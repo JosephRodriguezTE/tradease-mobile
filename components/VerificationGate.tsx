@@ -15,6 +15,7 @@ import {
     Animated, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { OnboardingColors as OC, OnboardingSpacing as OS, FontSize as FS } from '@/lib/design/onboarding-tokens';
+import { SUPPORT_EMAIL } from '@/constants/contact';
 
 type GateStatus = 'not_submitted' | 'pending_review' | 'rejected';
 
@@ -188,7 +189,7 @@ export default function VerificationGate({ visible, status, companyName, rejecti
               <>
                 <View style={[styles.statusRule, { borderLeftColor: OC.warning }]}>
                   <Text style={[styles.pendingNoteText, { color: OC.warning }]}>
-                    Approvals happen Monday–Friday. If it's been over 72 hours, contact support@tradease.app.
+                    Approvals happen Monday–Friday. If it's been over 72 hours, contact {SUPPORT_EMAIL}.
                   </Text>
                 </View>
 

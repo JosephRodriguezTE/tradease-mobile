@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/context/ThemeContext';
 import { HammerLoader } from '@/components/HammerLoader';
+import { SUPPORT_EMAIL } from '@/constants/contact';
 
 const FW = { regular:'400' as const, medium:'500' as const, semibold:'600' as const, bold:'700' as const, black:'800' as const };
 const SP = { 1:4,2:8,3:12,4:16,5:20,6:24,8:32,10:40 } as const;
@@ -579,7 +580,7 @@ export default function SubscriptionScreen() {
         <View style={[styles.footerBox, { backgroundColor:C.surface, borderColor:C.border }]}>
           <Ionicons name="shield-checkmark-outline" size={16} color={C.textMuted} />
           <Text style={[styles.footerText, { color:C.textMuted }]}>
-            Payments processed securely through Stripe. Cancel anytime from Settings. Unused portions of the billing period are non-refundable. Contact support@tradease.app for billing questions.
+            Payments processed securely through Stripe. Cancel anytime from Settings. Unused portions of the billing period are non-refundable. Contact {SUPPORT_EMAIL} for billing questions.
           </Text>
         </View>
       </ScrollView>

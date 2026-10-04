@@ -26,6 +26,7 @@ import { useLocationPermission } from '@/hooks/useLocationPermission';
 import { Type as DesignType } from '@/lib/design/tokens';
 import { paymentProvider } from '@/lib/payment/mock';
 import { extractFunctionErrorMessage } from '@/lib/functionErrors';
+import { SUPPORT_EMAIL } from '@/constants/contact';
 
 MapboxGL.setAccessToken(MAPBOX_ACCESS_TOKEN);
 
@@ -766,7 +767,7 @@ function SupportSection({ wo, collapsed, onToggle }: { wo: WoData; collapsed: bo
               body: { work_order_id: wo.id, reason: 'Customer opened dispute' },
             });
             setDisputing(false);
-            if (error) { Alert.alert('Error', 'Could not open dispute. Please email support@tradease.app'); return; }
+            if (error) { Alert.alert('Error', `Could not open dispute. Please email ${SUPPORT_EMAIL}`); return; }
             if (data?.already_open) {
               Alert.alert('Dispute Already Open', 'A dispute is already open on this job. Our team is reviewing it.');
               return;
@@ -782,10 +783,10 @@ function SupportSection({ wo, collapsed, onToggle }: { wo: WoData; collapsed: bo
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         { options: ['Report a Safety Issue', 'Report a Quality Issue', 'Other', 'Cancel'], cancelButtonIndex: 3 },
-        (i) => { if (i < 3) Linking.openURL(`mailto:support@tradease.app?subject=Issue%20Report%20%E2%80%94%20${wo.work_order_number}`); }
+        (i) => { if (i < 3) Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Issue%20Report%20%E2%80%94%20${wo.work_order_number}`); }
       );
     } else {
-      Linking.openURL(`mailto:support@tradease.app?subject=Issue%20Report%20%E2%80%94%20${wo.work_order_number}`);
+      Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Issue%20Report%20%E2%80%94%20${wo.work_order_number}`);
     }
   }
 
@@ -822,11 +823,11 @@ function SupportSection({ wo, collapsed, onToggle }: { wo: WoData; collapsed: bo
 
       <View style={[s.divider, { marginVertical: 4 }]} />
 
-      <TouchableOpacity style={s.supportRow} onPress={() => Linking.openURL('mailto:support@tradease.app')}>
+      <TouchableOpacity style={s.supportRow} onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}>
         <Ionicons name="mail-outline" size={18} color={O.txt2} />
         <View style={{ flex: 1 }}>
           <Text style={s.supportLabel}>Contact Tradease Support</Text>
-          <Text style={s.supportSub}>support@tradease.app</Text>
+          <Text style={s.supportSub}>{SUPPORT_EMAIL}</Text>
         </View>
         <Ionicons name="chevron-forward" size={16} color={O.txt3} />
       </TouchableOpacity>

@@ -25,6 +25,7 @@ import { enqueueOffline, flushOfflineQueue } from '@/lib/offlineQueue';
 import { MAPBOX_ACCESS_TOKEN } from '@/lib/mapConfig';
 import { supabase } from '@/lib/supabase';
 import { extractFunctionErrorMessage } from '@/lib/functionErrors';
+import { SUPPORT_EMAIL } from '@/constants/contact';
 
 MapboxGL.setAccessToken(MAPBOX_ACCESS_TOKEN);
 
@@ -975,10 +976,10 @@ function SupportSection({ wo, collapsed, onToggle, disputing, openDispute }: {
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
         { options: ['Report a Safety Issue', 'Report a Quality Issue', 'Other', 'Cancel'], cancelButtonIndex: 3 },
-        (i) => { if (i < 3) Linking.openURL(`mailto:support@tradease.app?subject=Issue%20Report%20%E2%80%94%20${wo.work_order_number}`); }
+        (i) => { if (i < 3) Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Issue%20Report%20%E2%80%94%20${wo.work_order_number}`); }
       );
     } else {
-      Linking.openURL(`mailto:support@tradease.app?subject=Issue%20Report%20%E2%80%94%20${wo.work_order_number}`);
+      Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Issue%20Report%20%E2%80%94%20${wo.work_order_number}`);
     }
   }
 
@@ -1015,11 +1016,11 @@ function SupportSection({ wo, collapsed, onToggle, disputing, openDispute }: {
 
       <View style={[s.divider, { marginVertical: 4 }]} />
 
-      <TouchableOpacity style={s.supportRow} onPress={() => Linking.openURL('mailto:support@tradease.app')}>
+      <TouchableOpacity style={s.supportRow} onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}>
         <Ionicons name="mail-outline" size={18} color={G.txt2} />
         <View style={{ flex: 1 }}>
           <Text style={s.supportLabel}>Contact Tradease Support</Text>
-          <Text style={s.supportSub}>support@tradease.app</Text>
+          <Text style={s.supportSub}>{SUPPORT_EMAIL}</Text>
         </View>
         <Ionicons name="chevron-forward" size={16} color={G.txt3} />
       </TouchableOpacity>
@@ -1465,7 +1466,7 @@ export default function ContractorWorkOrderScreen() {
               body: { work_order_id: wo.id, reason: 'Contractor opened dispute' },
             });
             setDisputing(false);
-            if (error) { Alert.alert('Error', 'Could not open dispute. Please email support@tradease.app'); return; }
+            if (error) { Alert.alert('Error', `Could not open dispute. Please email ${SUPPORT_EMAIL}`); return; }
             if (data?.already_open) {
               Alert.alert('Dispute Already Open', 'A dispute is already open on this job. Our team is reviewing it.');
               return;

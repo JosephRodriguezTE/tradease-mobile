@@ -2,8 +2,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { SUPPORT_EMAIL } from '../../constants/contact';
 
 const C = {
   bg:'#0A0A0F', surface:'#13131A', border:'#2A2A38',
@@ -14,60 +15,64 @@ const SP = { 2:8,3:12,4:16,5:20,6:24,8:32,10:40 } as const;
 const R  = { md:10,lg:16 } as const;
 const TY = { xs:11,sm:13,base:15,md:17,xl:24 } as const;
 
-interface Section { title: string; body: string; }
+// Mirrors the website Terms (app/terms/page.tsx in the website repo) word
+// for word, including its DRAFT status. Change both together.
+interface Section { title: string; body?: string[]; bullets?: string[]; after?: string; }
 
 const SECTIONS: Section[] = [
   {
-    title: '1. Acceptance of Terms',
-    body:  'By downloading, installing, or using the Tradease mobile application ("App"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, do not use the App. Tradease Inc. ("we," "us," or "our") reserves the right to update these Terms at any time. Continued use of the App after changes constitutes acceptance.',
+    title: '1. Tradease Is a Marketplace, Not a Contractor',
+    body: [
+      'Tradease Inc. (\u201cTradease,\u201d \u201cwe,\u201d \u201cus\u201d) operates an online marketplace platform that connects customers seeking home-service work with independent contractors offering that work, currently serving Nassau and Suffolk County, New York.',
+      'Tradease is not a contractor, home-improvement business, or employer, and is not a party to any agreement for work between a customer and a contractor. We do not perform, supervise, or guarantee any repair, installation, or other service booked through the platform. Our role is limited to facilitating discovery, communication, scheduling, and payment between independent parties.',
+    ],
   },
   {
-    title: '2. Description of Service',
-    body:  'Tradease is a marketplace platform that connects customers seeking trade services ("Customers") with licensed service providers ("Contractors"). Tradease does not directly provide any trade or home improvement services. We are not a party to any agreement between Customers and Contractors beyond facilitating the connection and payment.',
+    title: '2. Independent Contractors',
+    body: ['Contractors who list services on Tradease are independent businesses or individuals, not employees, agents, or representatives of Tradease. Each contractor is solely responsible for:'],
+    bullets: [
+      'Holding any license required to perform home-improvement work in New York State and complying with all applicable licensing laws in the county where the work is performed;',
+      'Carrying adequate insurance, including liability and, where applicable, workers\u2019 compensation coverage;',
+      'The quality, safety, legality, and timeliness of their own work;',
+      'Their own tax, employment, and business obligations.',
+    ],
+    after: 'Tradease reviews contractor-submitted documentation as part of onboarding but does not independently verify licensure or insurance with issuing authorities, and does not guarantee that any contractor is licensed, insured, or qualified for a given job.',
   },
   {
     title: '3. Eligibility',
-    body:  'You must be at least 18 years of age to use Tradease. By using the App, you represent and warrant that you meet this requirement. Contractors must hold all applicable licenses and insurance required by their local jurisdiction. Tradease reserves the right to verify credentials at any time.',
+    body: ['You must be at least 18 years old and able to form a binding contract to create an account, book a job, or offer services on Tradease. By using Tradease you represent that you meet these requirements.'],
   },
   {
-    title: '4. Contractor Verification',
-    body:  'Tradease verifies contractor credentials including license numbers, proof of insurance, and trade type at the time of registration. The "Tradease Verified" badge indicates that we have reviewed submitted documentation at a point in time. Tradease does not guarantee the ongoing accuracy, validity, or completeness of contractor credentials. Customers should conduct their own due diligence.',
+    title: '4. Fees',
+    body: ['Customers pay the price agreed with the contractor for a job plus a Tradease service/protection fee, disclosed before checkout. This fee compensates Tradease for operating the platform, payment processing, and support, and is separate from anything owed to the contractor for their labor or materials.'],
   },
   {
-    title: '5. Payments & Fees',
-    body:  'Tradease charges a platform service fee added to the contractor\'s quoted price. This fee ranges from 6% to 10% based on the total job amount and is disclosed transparently before payment is authorized. Estimated sales tax is shown separately and is based on the customer\'s location. Final tax amounts are determined at the time of payment. All payments are processed through Stripe and are subject to Stripe\'s Terms of Service.',
+    title: '5. No Guarantee of Work Quality or Outcomes',
+    body: ['Tradease does not warrant or guarantee the quality, outcome, safety, or legality of any work performed by a contractor found through the platform. Any dispute about the work itself is between the customer and the contractor. Tradease provides tools \u2014 messaging, a dispute-flagging process, and review of submitted evidence \u2014 to help resolve disagreements, but does not adjudicate contract or construction-defect claims and is not liable for the outcome of the underlying work.'],
   },
   {
-    title: '6. Work Orders & Approval',
-    body:  'Upon job completion, contractors submit a work order detailing services rendered and associated costs. Customers have 24 hours to review and either approve or dispute the work order. If no action is taken within 24 hours, payment is automatically authorized from the card on file. Once approved or auto-approved, charges are final.',
+    title: '6. Disputes Between Users',
+    body: ['If a customer and contractor disagree about a job, either party may open a dispute through the platform. Tradease may review submitted messages, photos, and payment records to help reach a resolution regarding funds held on the platform, but this process is offered as a courtesy and does not replace any legal remedy either party may have against the other.'],
   },
   {
-    title: '7. Disputes',
-    body:  'Customers may raise a dispute before payment is processed. Tradease will mediate disputes within 2 business days of submission. Tradease\'s decision in disputes is final. Submitting a false or frivolous dispute may result in account suspension. Disputes cannot be raised after payment has been fully processed.',
+    title: '7. Account Rules & Termination',
+    body: ['You agree to provide accurate account information, keep your login credentials secure, and use the platform lawfully. Tradease may suspend or terminate any account that violates these Terms, engages in fraud, harasses another user, or circumvents the platform to avoid fees. You may close your account at any time.'],
   },
   {
-    title: '8. Prohibited Conduct',
-    body:  'You agree not to use Tradease to: (a) post false or misleading information; (b) solicit off-platform payments to avoid fees; (c) harass, threaten, or discriminate against other users; (d) reverse-engineer or misuse the App; (e) violate any applicable law or regulation. Violations may result in immediate account termination.',
+    title: '8. Limitation of Liability',
+    body: ['To the fullest extent permitted by law, Tradease\u2019s total liability arising out of or relating to your use of the platform is limited to the fees you paid to Tradease in the twelve months before the claim arose. Tradease is not liable for indirect, incidental, or consequential damages, or for the acts or omissions of any contractor or customer.'],
   },
   {
-    title: '9. Limitation of Liability',
-    body:  'To the fullest extent permitted by law, Tradease shall not be liable for any indirect, incidental, special, or consequential damages arising from your use of the App, including but not limited to damages arising from contractor performance, property damage, or personal injury. Our total liability shall not exceed the fees paid by you in the 90 days preceding the claim.',
+    title: '9. Governing Law',
+    body: ['These Terms are governed by the laws of the State of New York, without regard to conflict-of-law principles, and any dispute with Tradease will be subject to the exclusive jurisdiction of the state and federal courts located in New York.'],
   },
   {
-    title: '10. Indemnification',
-    body:  'You agree to indemnify and hold harmless Tradease Inc., its officers, directors, employees, and agents from any claims, liabilities, damages, or expenses (including legal fees) arising from your use of the App, your violation of these Terms, or your interaction with other users.',
+    title: '10. Changes to These Terms',
+    body: ['We may update these Terms as Tradease evolves. Material changes will be reflected on this page with an updated date above.'],
   },
   {
-    title: '11. Termination',
-    body:  'Tradease reserves the right to suspend or terminate your account at any time for any reason, including violation of these Terms. You may delete your account at any time by contacting support@tradease.app. Upon termination, all licenses granted to you immediately expire.',
-  },
-  {
-    title: '12. Governing Law',
-    body:  'These Terms are governed by the laws of the State of New York, without regard to conflict of law principles. Any disputes shall be resolved in the state or federal courts located in New York County, New York.',
-  },
-  {
-    title: '13. Contact',
-    body:  'Questions about these Terms? Contact us at: legal@tradease.app or Tradease Inc., 123 Trade Street, New York, NY 10001.',
+    title: '11. Contact',
+    body: [`Questions about these Terms can be sent to ${SUPPORT_EMAIL}.`],
   },
 ];
 
@@ -90,28 +95,35 @@ export default function TermsScreen() {
         <View style={s.effectiveCard}>
           <Ionicons name="document-text-outline" size={18} color={C.primary} />
           <View>
-            <Text style={s.effectiveLabel}>Effective Date</Text>
-            <Text style={s.effectiveDate}>May 25, 2026</Text>
+            <Text style={s.effectiveLabel}>Last Updated</Text>
+            <Text style={s.effectiveDate}>August 2026</Text>
           </View>
         </View>
 
-        <Text style={s.intro}>
-          Please read these Terms of Service carefully before using Tradease. They explain your rights,
-          responsibilities, and our policies around payments, disputes, and contractor verification.
-        </Text>
+        <View style={s.draftCard}>
+          <Text style={s.draftText}>
+            DRAFT — pending legal review, not final. This page is placeholder policy text
+            published so users have something real to read while our attorney finalizes the
+            binding version. It is not yet legally reviewed and may change.
+          </Text>
+        </View>
 
         {SECTIONS.map((sec) => (
           <View key={sec.title} style={s.section}>
             <Text style={s.sectionTitle}>{sec.title}</Text>
-            <Text style={s.sectionBody}>{sec.body}</Text>
+            {sec.body?.map(p => <Text key={p} style={[s.sectionBody, s.para]}>{p}</Text>)}
+            {sec.bullets?.map(b => (
+              <Text key={b} style={[s.sectionBody, s.bullet]}>{'\u2022  '}{b}</Text>
+            ))}
+            {sec.after && <Text style={[s.sectionBody, s.para]}>{sec.after}</Text>}
           </View>
         ))}
 
         <View style={s.footer}>
-          <Text style={s.footerText}>
-            By using Tradease, you acknowledge that you have read, understood, and agree to these Terms of Service.
-          </Text>
-          <Text style={s.footerContact}>legal@tradease.app</Text>
+          <Text style={s.footerText}>Questions about these Terms?</Text>
+          <TouchableOpacity onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}>
+            <Text style={s.footerContact}>{SUPPORT_EMAIL}</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={{ height:SP[10] }} />
@@ -130,7 +142,10 @@ const s = StyleSheet.create({
   effectiveCard:  { flexDirection:'row', alignItems:'center', gap:SP[3], backgroundColor:C.surface, borderRadius:R.lg, borderWidth:0.5, borderColor:C.border, padding:SP[4], marginBottom:SP[5] },
   effectiveLabel: { fontSize:TY.xs, color:C.textTertiary, fontWeight:'600', textTransform:'uppercase', letterSpacing:0.5 },
   effectiveDate:  { fontSize:TY.base, color:C.textPrimary, fontWeight:'700', marginTop:2 },
-  intro:          { fontSize:TY.base, color:C.textSecondary, lineHeight:24, marginBottom:SP[6] },
+  draftCard:      { backgroundColor:'rgba(255,98,0,0.08)', borderRadius:R.md, borderWidth:1, borderColor:'rgba(255,98,0,0.3)', padding:SP[4], marginBottom:SP[6] },
+  draftText:      { fontSize:TY.sm, color:'#FF6200', fontWeight:'700', lineHeight:20 },
+  para:           { marginBottom:SP[2] },
+  bullet:         { marginBottom:SP[2], paddingLeft:SP[2] },
   section:        { marginBottom:SP[6] },
   sectionTitle:   { fontSize:TY.base, fontWeight:'700', color:C.primary, marginBottom:SP[3] },
   sectionBody:    { fontSize:TY.sm, color:C.textSecondary, lineHeight:22 },
