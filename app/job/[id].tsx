@@ -4,6 +4,7 @@ import { useTheme } from '@/context/ThemeContext';
 import VerificationGate from '@/components/VerificationGate';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
+import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -225,7 +226,8 @@ export default function JobDetailScreen() {
   const { isContractor, isCustomer } = useRole();
 
   const { user } = useAuth();
-  const isAdmin = user?.email === 'joegimapa@gmail.com';
+  // users.is_admin, same as the admin hub -- not a hard-coded email.
+  const { isAdmin } = useIsAdmin();
 
   const [booking, setBooking]   = useState<any>(null);
   const [loading, setLoading]   = useState(true);

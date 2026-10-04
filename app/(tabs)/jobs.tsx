@@ -13,6 +13,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
 import { supabase } from '@/lib/supabase';
+import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { fetchPublicContractors } from '@/lib/contractorsPublic';
 import { formatRemaining } from '@/lib/time';
 import ContractorJobFeed from './contractor-home';
@@ -185,7 +186,8 @@ function CustomerBookings() {
   const { colors: C } = useTheme();
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const isAdmin = user?.email === 'joegimapa@gmail.com';
+  // users.is_admin, same as the admin hub -- not a hard-coded email.
+  const { isAdmin } = useIsAdmin();
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);

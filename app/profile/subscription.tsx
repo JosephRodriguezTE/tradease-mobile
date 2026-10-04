@@ -120,7 +120,7 @@ const PLAN_EMPLOYEE_LIMITS: Record<string, number> = {
 };
 
 function PlanCard({
-  plan, annual, current, onSelect, C, teamUsed, isDev,
+  plan, annual, current, onSelect, C, teamUsed,
 }: {
   plan: typeof PLANS[number];
   annual: boolean;
@@ -128,12 +128,12 @@ function PlanCard({
   onSelect: (key:string) => void;
   C: any;
   teamUsed: number;
-  isDev: boolean;
 }) {
   const isCurrent    = current === plan.key;
   const price        = annual ? (plan.annual / 12) : plan.monthly;
   const savings      = plan.monthly > 0 ? Math.round((plan.monthly * 12 - plan.annual) / (plan.monthly * 12) * 100) : 0;
-  const isPaidLocked = plan.monthly > 0 && !isDev;
+  // Paid plans can't be bought until Stripe is live.
+  const isPaidLocked = plan.monthly > 0;
   const scale        = useRef(new Animated.Value(1)).current;
 
   function handlePress() {
@@ -269,157 +269,7 @@ function PlanCard({
   );
 }
 
-// ─── Confirm Sheet ───────────────────────────────────────────────────────────
-
-function ConfirmSheet({
-  plan, annual, isDev, onConfirm, onClose, upgrading, C,
-}: {
-  plan: typeof PLANS[number];
-  annual: boolean;
-  isDev: boolean;
-  onConfirm: () => void;
-  onClose: () => void;
-  upgrading: boolean;
-  C: any;
-}) {
-  const slideAnim = useRef(new Animated.Value(380)).current;
-
-  useEffect(() => {
-    Animated.spring(slideAnim, {
-      toValue: 0,
-      tension: 58,
-      friction: 11,
-      useNativeDriver: true,
-    }).start();
-  }, []);
-
-  const price       = annual ? Math.round(plan.annual / 12) : plan.monthly;
-  const topFeatures = plan.features.filter(f => f.included).slice(0, 4);
-
-  return (
-    <Modal transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.72)' }}
-        onPress={upgrading ? undefined : onClose}
-      />
-      <Animated.View style={[cs.sheet, { backgroundColor: C.surface, transform: [{ translateY: slideAnim }] }]}>
-
-        {/* Handle */}
-        <View style={[cs.handle, { backgroundColor: C.border }]} />
-
-        {/* Plan header */}
-        <View style={cs.planHeader}>
-          <View style={[cs.planIcon, { backgroundColor: plan.color + '18' }]}>
-            <Ionicons name={plan.icon as any} size={26} color={plan.color} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[cs.planName, { color: C.textPrimary }]}>{plan.label}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 3, marginTop: 2 }}>
-              <Text style={[cs.priceMain, { color: plan.color }]}>${price}</Text>
-              <Text style={[cs.pricePer, { color: C.textSecondary }]}>/mo</Text>
-              {annual && plan.annual > 0 && (
-                <View style={[cs.savePill, { backgroundColor: 'rgba(34,197,94,0.12)' }]}>
-                  <Text style={{ fontSize: TY.xs, fontWeight: FW.black, color: '#22C55E' }}>Save 17%</Text>
-                </View>
-              )}
-            </View>
-          </View>
-        </View>
-
-        {/* Key features */}
-        <View style={[cs.featuresBox, { backgroundColor: C.background }]}>
-          {topFeatures.map((f, i) => (
-            <View key={i} style={cs.featureRow}>
-              <Ionicons name="checkmark-circle" size={15} color={plan.color} />
-              <Text style={[cs.featureText, { color: C.textSecondary }]}>{f.text}</Text>
-            </View>
-          ))}
-        </View>
-
-        {isDev ? (
-          <>
-            {/* Dev mode badge */}
-            <View style={cs.devNote}>
-              <Ionicons name="flask-outline" size={13} color={C.textMuted} />
-              <Text style={[cs.devNoteText, { color: C.textMuted }]}>Dev mode — bypasses Stripe for testing</Text>
-            </View>
-
-            {/* Activate button */}
-            <TouchableOpacity
-              style={[cs.primaryBtn, { backgroundColor: plan.color, opacity: upgrading ? 0.65 : 1 }]}
-              onPress={onConfirm}
-              disabled={upgrading}
-              activeOpacity={0.85}
-            >
-              {upgrading
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <>
-                    <Ionicons name="flash" size={17} color="#fff" />
-                    <Text style={cs.primaryBtnText}>Activate {plan.label}</Text>
-                  </>
-              }
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            {/* Coming soon panel */}
-            <View style={[cs.comingSoonBox, { backgroundColor: 'rgba(255,98,0,0.06)', borderColor: 'rgba(255,98,0,0.22)' }]}>
-              <Ionicons name="time-outline" size={26} color={C.orange} />
-              <Text style={[cs.comingSoonTitle, { color: C.textPrimary }]}>Payments Coming Soon</Text>
-              <Text style={[cs.comingSoonSub, { color: C.textSecondary }]}>
-                Stripe isn't live yet. You'll get early access when {plan.label} subscriptions open.
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={[cs.primaryBtn, { backgroundColor: C.orange }]}
-              onPress={onClose}
-              activeOpacity={0.85}
-            >
-              <Text style={cs.primaryBtnText}>Got It</Text>
-            </TouchableOpacity>
-          </>
-        )}
-
-        {/* Cancel */}
-        <TouchableOpacity
-          style={cs.cancelBtn}
-          onPress={onClose}
-          disabled={upgrading}
-        >
-          <Text style={[cs.cancelBtnText, { color: C.textSecondary }]}>Cancel</Text>
-        </TouchableOpacity>
-      </Animated.View>
-    </Modal>
-  );
-}
-
-const cs = StyleSheet.create({
-  sheet:          { position: 'absolute', bottom: 0, left: 0, right: 0, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: SP[5], paddingBottom: SP[10] },
-  handle:         { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: SP[3], marginBottom: SP[5] },
-  planHeader:     { flexDirection: 'row', alignItems: 'center', gap: SP[3], marginBottom: SP[4] },
-  planIcon:       { width: 54, height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  planName:       { fontSize: TY['2xl'], fontWeight: FW.black, letterSpacing: -0.4 },
-  priceMain:      { fontSize: 36, fontWeight: FW.black, letterSpacing: -1, lineHeight: 40 },
-  pricePer:       { fontSize: TY.base, fontWeight: FW.medium, marginBottom: 4 },
-  savePill:       { borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2, marginBottom: 4, marginLeft: 2 },
-  featuresBox:    { borderRadius: 14, padding: SP[4], gap: SP[2], marginBottom: SP[4] },
-  featureRow:     { flexDirection: 'row', alignItems: 'center', gap: SP[2] },
-  featureText:    { fontSize: TY.sm, flex: 1, lineHeight: 20 },
-  devNote:        { flexDirection: 'row', alignItems: 'center', gap: SP[2], marginBottom: SP[3] },
-  devNoteText:    { fontSize: TY.xs, flex: 1 },
-  primaryBtn:     { borderRadius: R.lg, paddingVertical: SP[4], alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: SP[2], marginBottom: SP[2] },
-  primaryBtnText: { fontSize: TY.md, fontWeight: FW.black, color: '#fff' },
-  comingSoonBox:  { borderRadius: 16, borderWidth: 1, padding: SP[5], alignItems: 'center', gap: SP[3], marginBottom: SP[4] },
-  comingSoonTitle:{ fontSize: TY.md, fontWeight: FW.black },
-  comingSoonSub:  { fontSize: TY.sm, textAlign: 'center', lineHeight: 20 },
-  cancelBtn:      { alignItems: 'center', paddingVertical: SP[3] },
-  cancelBtnText:  { fontSize: TY.base, fontWeight: FW.semibold },
-});
-
 // ─── Main ─────────────────────────────────────────────────────────────────────
-
-const DEV_EMAIL = 'joegimapa@gmail.com';
 
 export default function SubscriptionScreen() {
   const router = useRouter();
@@ -429,14 +279,11 @@ export default function SubscriptionScreen() {
   const [loading,     setLoading]     = useState(true);
   const [upgrading,   setUpgrading]   = useState(false);
   const [teamUsed,    setTeamUsed]    = useState(0);
-  const [userEmail,   setUserEmail]   = useState('');
-  const [confirmPlan, setConfirmPlan] = useState<typeof PLANS[number] | null>(null);
 
   useEffect(() => {
     async function load() {
       const { data:{ user } } = await supabase.auth.getUser();
       if (!user) return;
-      setUserEmail(user.email ?? '');
       const [{ data: contractorData }, { data: summaryData }] = await Promise.all([
         supabase.from('contractors').select('plan').eq('id', user.id).single(),
         supabase.from('contractor_team_summary').select('total_used').eq('contractor_id', user.id).single(),
@@ -497,19 +344,6 @@ export default function SubscriptionScreen() {
         ],
       );
       return;
-    }
-
-    const planData = PLANS.find(p => p.key === plan);
-    if (planData) setConfirmPlan(planData);
-  }
-
-  async function handleConfirm() {
-    if (!confirmPlan) return;
-    const label = confirmPlan.label;
-    const ok = await applyPlanChange(confirmPlan.key);
-    setConfirmPlan(null);
-    if (ok) {
-      Alert.alert('Plan Activated', `You are now on ${label}.`);
     }
   }
 
@@ -572,7 +406,6 @@ export default function SubscriptionScreen() {
             onSelect={handleSelect}
             C={C}
             teamUsed={teamUsed}
-            isDev={userEmail === DEV_EMAIL}
           />
         ))}
 
@@ -591,17 +424,6 @@ export default function SubscriptionScreen() {
         </View>
       )}
 
-      {confirmPlan && (
-        <ConfirmSheet
-          plan={confirmPlan}
-          annual={annual}
-          isDev={userEmail === DEV_EMAIL}
-          onConfirm={handleConfirm}
-          onClose={() => setConfirmPlan(null)}
-          upgrading={upgrading}
-          C={C}
-        />
-      )}
     </SafeAreaView>
   );
 }
