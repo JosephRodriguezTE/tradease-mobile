@@ -203,6 +203,13 @@ function CompanyCard({ contractor }: { contractor: any }) {
   );
 }
 
+// Only what this screen renders. customer_phone, job_lat/lng and photo_urls
+// are read by postAgain() itself, at repost time.
+const BOOKING_SELECT = `id, customer_id, contractor_id, customer_name, contractor_name, status, trade, description, notes,
+  price_estimate, booking_time, scheduled_at, request_mode, request_expires_at, is_instant_book, instant_book_price,
+  town, nearest_major_road, before_photos, after_photos,
+  contractor:contractor_id (id, company_name, trade_type, avatar_url, rating, phone, tagline, description, username, plan, verification_status, verified, insured, license_verified, specializations, is_available, total_bookings, review_count, location)`;
+
 export default function JobDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -235,7 +242,7 @@ export default function JobDetailScreen() {
     async function loadData() {
       const { data: fullBooking } = await supabase
         .from('bookings')
-        .select(`*, contractor:contractor_id (id, company_name, trade_type, avatar_url, rating, phone, tagline, description, username, plan, verification_status, verified, insured, license_verified, specializations, is_available, total_bookings, review_count, location)`)
+        .select(BOOKING_SELECT)
         .eq('id', id)
         .maybeSingle();
 
@@ -250,10 +257,21 @@ export default function JobDetailScreen() {
       // that fallback so the render below knows not to expect fields
       // this path never carries (exact address, customer identity,
       // photos, scheduling).
+      //
+      // A pending request assigned to this contractor is hidden the same way
+      // until they accept it; direct_request_previews() gives the preview --
+      // "First L." and the town, no address, phone or notes. isPreview marks
+      // it. Full detail is refetched on accept.
       if (!bookingData && isContractor) {
-        const { data: publicRows } = await supabase.rpc('public_job_by_id', { job_id: id });
-        const publicJob = publicRows?.[0] ?? null;
-        if (publicJob) bookingData = { ...publicJob, isPublicView: true };
+        const { data: previews } = await supabase.rpc('direct_request_previews', { p_booking_id: id });
+        const preview = previews?.[0] ?? null;
+        if (preview) {
+          bookingData = { ...preview, isPreview: true };
+        } else {
+          const { data: publicRows } = await supabase.rpc('public_job_by_id', { job_id: id });
+          const publicJob = publicRows?.[0] ?? null;
+          if (publicJob) bookingData = { ...publicJob, isPublicView: true };
+        }
       }
 
       setBooking(bookingData);
@@ -496,7 +514,11 @@ export default function JobDetailScreen() {
       return;
     }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setBooking((p: any) => ({ ...p, ...(acceptedBooking ?? {}), status: 'confirmed' }));
+    // Accepted: the full row (address, notes, full name) is now visible.
+    const { data: full } = await supabase.from('bookings').select(BOOKING_SELECT).eq('id', id).maybeSingle();
+    setBooking((p: any) => full
+      ? { ...full, isPreview: false }
+      : { ...p, ...(acceptedBooking ?? {}), status: 'confirmed', isPreview: false });
   }
 
   async function declineDirectRequest() {
@@ -599,16 +621,19 @@ export default function JobDetailScreen() {
     setExpiredActionSaving(true);
     try {
       const hours = booking.request_mode === 'post' ? 48 : 24;
+      const { data: src, error: srcErr } = await supabase
+        .from('bookings').select('customer_phone, job_lat, job_lng, photo_urls').eq('id', booking.id).single();
+      if (srcErr) throw srcErr;
       const { data: fresh, error } = await supabase.from('bookings').insert({
         customer_id:         booking.customer_id,
         user_id:             user.id,
         customer_name:       booking.customer_name,
-        customer_phone:      booking.customer_phone,
+        customer_phone:      src.customer_phone,
         trade:                booking.trade,
         description:         booking.description,
         notes:               booking.notes,
-        job_lat:             booking.job_lat,
-        job_lng:             booking.job_lng,
+        job_lat:             src.job_lat,
+        job_lng:             src.job_lng,
         price_estimate:      booking.price_estimate,
         booking_time:        booking.booking_time,
         status:              'pending',
@@ -616,7 +641,7 @@ export default function JobDetailScreen() {
         refund_status:       'none',
         is_instant_book:     booking.is_instant_book,
         instant_book_price:  booking.instant_book_price,
-        ...(booking.photo_urls?.length ? { photo_urls: booking.photo_urls } : {}),
+        ...(src.photo_urls?.length ? { photo_urls: src.photo_urls } : {}),
         request_mode:        booking.request_mode ?? 'request',
         request_expires_at:  new Date(Date.now() + hours * 60 * 60 * 1000).toISOString(),
       }).select('id').single();
@@ -757,12 +782,12 @@ export default function JobDetailScreen() {
 
         {/* Info grid */}
         <View style={s.infoGrid}>
-          {(booking.isPublicView || !!booking.notes) && (
+          {(booking.isPublicView || booking.isPreview || !!booking.notes) && (
             <View style={[s.infoCard, { backgroundColor: C.surface, borderColor: C.border }]}>
               <Ionicons name="location-outline" size={20} color={C.orange} />
               <Text style={[s.infoLabel, { color: C.textMuted }]}>LOCATION</Text>
               <Text style={[s.infoValue, { color: C.textPrimary }]} numberOfLines={2}>
-                {booking.isPublicView ? areaLabel : booking.notes}
+                {booking.isPublicView || booking.isPreview ? areaLabel : booking.notes}
               </Text>
             </View>
           )}

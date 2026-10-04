@@ -196,26 +196,6 @@ export async function getNearbyContractors(
   return (data ?? []) as NearbyContractor[];
 }
 
-export async function getNearbyJobs(
-  center: Coords,
-  options: {
-    radiusMiles?: number;
-    trade?: string | null;
-  } = {}
-) {
-  const { data, error } = await supabase.rpc('nearby_jobs', {
-    contractor_lat: center.lat,
-    contractor_lng: center.lng,
-    max_distance_miles: options.radiusMiles ?? 50,
-    filter_trade: options.trade ?? null,
-  });
-  if (error) {
-    console.log('nearby_jobs error:', error);
-    return [];
-  }
-  return data ?? [];
-}
-
 // ── HELPERS ───────────────────────────────────────────────
 export function boundsFromCenter(center: Coords, radiusMiles = 10): MapBounds {
   const delta = radiusMiles / 35; // rough zoom level
