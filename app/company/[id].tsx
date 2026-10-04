@@ -79,16 +79,22 @@ export default function ContractorPublicProfile() {
 
   useEffect(() => {
     async function load() {
+      // Guests (no session) can't be sent phone -- contractors_public.phone
+      // calls has_active_booking_relationship(), which anon can't execute,
+      // so asking for it failed the whole query and showed "Contractor not
+      // found". Signed-in users still get it (null unless they have a
+      // booking or the contractor made it public).
+      const { data: { session } } = await supabase.auth.getSession();
       const { data } = await supabase
         .from('contractors_public')
         .select(`
           id, company_name, trade_type, plan, rating, review_count,
           is_available, service_area, avatar_url, hourly_rate,
           description, experience, location, portfolio_photos,
-          banner_url, tagline, business_city, business_state, phone,
+          banner_url, tagline, business_city, business_state,
           insured, license_verified, verification_status, verified,
           total_bookings, response_time_avg, years_in_business,
-          specializations, languages, website
+          specializations, languages, website${session ? ', phone' : ''}
         `)
         .eq('id', id)
         .single();
