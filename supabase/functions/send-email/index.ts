@@ -6,7 +6,9 @@
 // Resend docs: https://resend.com/docs/api-reference/emails/send-email
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { isValidInternalSecret } from '../_shared/internalSecret.ts'
+import { getServiceKey } from '../_shared/secretKey.ts'
 
 type EmailType =
   | 'booking_confirmation'
@@ -31,6 +33,9 @@ type EmailType =
 // those. Website callers pass `type` + `subject` explicitly and take
 // precedence when both are present.
 interface RawEmailPayload {
+  // 'process_outbox': sent every minute by process_email_outbox() (cron)
+  // when public.email_outbox has something due.
+  action?: 'process_outbox'
   to: string
   subject?: string
   type?: EmailType
@@ -62,6 +67,8 @@ const DEFAULT_SUBJECTS: Partial<Record<EmailType, string>> = {
 // constants/contact.ts) and report_inbox() in the database.
 const REPLY_TO = 'support@tradease.tech'
 
+const FROM = 'Tradease <hello@tradease.tech>'
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -83,6 +90,14 @@ serve(async (req: Request) => {
 
   try {
     const raw: RawEmailPayload = await req.json()
+
+    if (raw.action === 'process_outbox') {
+      const result = await processOutbox()
+      return new Response(JSON.stringify(result), {
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      })
+    }
+
     const type = raw.type ?? raw.template
     const subject = raw.subject ?? (type ? DEFAULT_SUBJECTS[type] : undefined)
 
@@ -97,32 +112,13 @@ serve(async (req: Request) => {
 
     const html = buildEmailHtml(payload)
 
-    const apiKey = Deno.env.get('RESEND_API_KEY')
-    if (!apiKey) {
+    const sent = await sendViaResend(payload.to, payload.subject, html)
+    if (!sent) {
       // No key set — log stub so nothing silently breaks in dev
       console.log('[send-email] STUB (no RESEND_API_KEY) — would send:', payload.to, payload.subject)
       return new Response(JSON.stringify({ success: true, stub: true }), {
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       })
-    }
-
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: 'Tradease <hello@tradease.tech>',
-        reply_to: REPLY_TO,
-        to: [payload.to],
-        subject: payload.subject,
-        html,
-      }),
-    })
-    if (!res.ok) {
-      const err = await res.text()
-      throw new Error(`Resend API error: ${err}`)
     }
 
     return new Response(JSON.stringify({ success: true }), {
@@ -136,6 +132,83 @@ serve(async (req: Request) => {
     })
   }
 })
+
+// false = no RESEND_API_KEY (nothing sent); throws on a provider error.
+async function sendViaResend(to: string, subject: string, html: string): Promise<boolean> {
+  const apiKey = Deno.env.get('RESEND_API_KEY')
+  if (!apiKey) return false
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ from: FROM, reply_to: REPLY_TO, to: [to], subject, html }),
+  })
+  if (!res.ok) {
+    throw new Error(`Resend API error: ${await res.text()}`)
+  }
+  return true
+}
+
+// The digest knows how many messages are still unread (claim_email_outbox()
+// counts them at send time).
+function subjectFor(type: EmailType, data: Record<string, unknown>): string | undefined {
+  if (type === 'new_message') {
+    const n = Number(data.unreadCount) || 1
+    const sender = String(data.senderName ?? 'Someone')
+    return n > 1 ? `${n} new messages from ${sender}` : `New message from ${sender}`
+  }
+  return (typeof data.subject === 'string' && data.subject) || DEFAULT_SUBJECTS[type]
+}
+
+interface OutboxRow {
+  id: number
+  to_address: string
+  template: string
+  data: Record<string, unknown>
+  attempts: number
+}
+
+// Claim due rows (address, preference and unread check are resolved in the
+// claim), send each, record the outcome. A failed row goes back to pending
+// with backoff; finish_email_outbox() gives up after 5 attempts.
+async function processOutbox(): Promise<{ sent: number; failed: number }> {
+  const admin = createClient(Deno.env.get('SUPABASE_URL')!, getServiceKey(), {
+    auth: { persistSession: false },
+  })
+  let sent = 0
+  let failed = 0
+  // A few batches per run; anything left is picked up by the next minute's run.
+  for (let batch = 0; batch < 4; batch++) {
+    const { data: rows, error } = await admin.rpc('claim_email_outbox', { p_limit: 25 })
+    if (error) throw new Error(`claim_email_outbox: ${error.message}`)
+    if (!rows || rows.length === 0) break
+
+    for (const row of rows as OutboxRow[]) {
+      let failure: string | null = null
+      try {
+        const type = row.template as EmailType
+        const data = row.data ?? {}
+        const subject = subjectFor(type, data)
+        if (!subject) throw new Error(`No subject for template "${row.template}"`)
+        const html = buildEmailHtml({ to: row.to_address, subject, type, data })
+        if (!(await sendViaResend(row.to_address, subject, html))) failure = 'RESEND_API_KEY not set'
+      } catch (err) {
+        failure = err instanceof Error ? err.message : String(err)
+      }
+      const { error: finishError } = await admin.rpc('finish_email_outbox', { p_id: row.id, p_error: failure })
+      if (finishError) console.error('[send-email] finish_email_outbox:', row.id, finishError.message)
+      if (failure) {
+        failed++
+        console.error('[send-email] outbox row failed:', row.id, row.template, failure)
+      } else {
+        sent++
+      }
+    }
+  }
+  return { sent, failed }
+}
 
 function escapeHtml(value: unknown): string {
   return String(value)
@@ -230,7 +303,7 @@ function buildEmailHtml(payload: EmailPayload): string {
     case 'new_message':
       return wrapper(`
         <h1 style="font-size:22px;font-weight:800;margin:0 0 8px;color:#F0F0F0;">New Message 💬</h1>
-        <p style="color:#9A9A9A;margin:0 0 20px;"><strong style="color:#F0F0F0;">${escapeHtml(data.senderName ?? 'Someone')}</strong> sent you a message.</p>
+        <p style="color:#9A9A9A;margin:0 0 20px;"><strong style="color:#F0F0F0;">${escapeHtml(data.senderName ?? 'Someone')}</strong> sent you ${Number(data.unreadCount) > 1 ? `${Number(data.unreadCount)} messages` : 'a message'}.</p>
         ${data.messagePreview ? `
           <div style="background:#222;border-left:3px solid #FF6200;border-radius:0 10px 10px 0;padding:14px 16px;margin-bottom:24px;">
             <p style="margin:0;font-size:14px;color:#C0C0C0;font-style:italic;">"${escapeHtml(data.messagePreview)}"</p>
