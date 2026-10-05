@@ -4,6 +4,10 @@ import { supabase } from './supabase';
 // ─── Chat ID helpers ──────────────────────────────────────────────────────────
 
 /** Derives a stable chat_id from two user UUIDs (alphabetically sorted, joined with _) */
+// Body of a photo message: messages.body is NOT NULL and push previews read
+// it, so a photo (media_path) carries this and the bubble shows the image.
+export const PHOTO_BODY = '📷 Photo';
+
 export function deriveChatId(uid1: string, uid2: string): string {
   return [uid1, uid2].sort().join('_');
 }

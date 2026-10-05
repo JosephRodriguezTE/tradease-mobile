@@ -26,7 +26,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
-import { deriveChatId } from '@/lib/messageService';
+import { deriveChatId, PHOTO_BODY } from '@/lib/messageService';
 import { HammerLoader } from '@/components/HammerLoader';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
@@ -57,9 +57,6 @@ interface WoMessage {
   deleted_at: string | null;
 }
 
-// messages.body is NOT NULL and push previews read it, so a photo carries
-// this placeholder; the bubble shows the photo instead of the text.
-export const PHOTO_BODY = '📷 Photo';
 const MESSAGE_COLUMNS = 'id, chat_id, sender_id, body, media_path, created_at, read_at, deleted_at';
 
 interface Thread { chatId: string; otherId: string; myRole: 'customer' | 'contractor'; myName: string }

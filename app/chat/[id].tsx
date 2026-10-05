@@ -17,7 +17,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ChatPhoto } from '@/components/ChatPhoto';
 import {
+  PHOTO_BODY,
   deriveChatId,
   getChatMessages,
   markChatRead,
@@ -69,9 +71,21 @@ function MessageBubble({ msg, isMe, C }: { msg: any; isMe: boolean; C: any }) {
           ? { backgroundColor: C.orange, borderBottomRightRadius: 4 }
           : { backgroundColor: C.surface, borderWidth: 0.5, borderColor: C.border, borderBottomLeftRadius: 4 },
       ]}>
-        <Text style={[{ fontSize: 15, lineHeight: 20 }, isMe ? { color: C.background } : { color: C.textPrimary }]}>
-          {msg.body}
-        </Text>
+        {msg.deleted_at ? (
+          <Text style={[{ fontSize: 15, lineHeight: 20, fontStyle: 'italic', opacity: 0.6 }, isMe ? { color: C.background } : { color: C.textPrimary }]}>
+            Message deleted
+          </Text>
+        ) : (
+          <>
+            {/* Photos posted from the work-order chat share this thread. */}
+            {msg.media_path ? <ChatPhoto mediaPath={msg.media_path} textColor={isMe ? C.background : C.textPrimary} /> : null}
+            {msg.media_path && msg.body === PHOTO_BODY ? null : (
+              <Text style={[{ fontSize: 15, lineHeight: 20 }, isMe ? { color: C.background } : { color: C.textPrimary }]}>
+                {msg.body}
+              </Text>
+            )}
+          </>
+        )}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 3 }}>
           <Text style={{ fontSize: 10, color: isMe ? 'rgba(0,0,0,0.4)' : C.textMuted }}>{msgTime(msg.created_at)}</Text>
           {isMe && (
