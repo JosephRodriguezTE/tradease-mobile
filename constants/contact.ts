@@ -1,6 +1,6 @@
-// The one inbox for support, privacy and data requests, pending
-// confirmation of which address is canonical. Keep in step with
+// The one inbox for support, privacy and data requests. Keep in step with
 // SUPPORT_EMAIL on the website (lib/contact.ts) and report_inbox() in the
-// database. tradease.app is the only one of our domains that accepts mail
-// today (tradease.tech has no MX record).
-export const SUPPORT_EMAIL = 'support@tradease.app';
+// database. tradease.tech is the only domain we own -- never use any
+// other. As of 2026-10-04 tradease.tech has no MX
+// record, so this address can't receive mail until inbound email is set up.
+export const SUPPORT_EMAIL = 'support@tradease.tech';

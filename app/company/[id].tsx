@@ -293,7 +293,7 @@ export default function ContractorPublicProfile() {
               style={[s.msgBtn, { backgroundColor:C.surface, borderColor:C.border }]}
               onPress={() => Share.share({
                 title: contractor.company_name,
-                message: `Check out ${contractor.company_name} on Tradease — ${contractor.trade_type ?? 'contractor'} in ${contractor.business_city ?? contractor.location ?? 'your area'}.\nhttps://tradease.app/contractor/${id}`,
+                message: `Check out ${contractor.company_name} on Tradease — ${contractor.trade_type ?? 'contractor'} in ${contractor.business_city ?? contractor.location ?? 'your area'}.\nhttps://tradease.tech/contractor/${id}`,
               })}
             >
               <Ionicons name="share-outline" size={18} color={C.textSecondary} />
