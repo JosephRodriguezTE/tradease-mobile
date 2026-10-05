@@ -57,6 +57,11 @@ const DEFAULT_SUBJECTS: Partial<Record<EmailType, string>> = {
   report_submitted: 'New report on Tradease',
 }
 
+// Mail goes out from hello@tradease.tech; replies land in the support inbox.
+// Keep in step with SUPPORT_EMAIL (website lib/contact.ts, mobile
+// constants/contact.ts) and report_inbox() in the database.
+const REPLY_TO = 'support@tradease.tech'
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -109,6 +114,7 @@ serve(async (req: Request) => {
       },
       body: JSON.stringify({
         from: 'Tradease <hello@tradease.tech>',
+        reply_to: REPLY_TO,
         to: [payload.to],
         subject: payload.subject,
         html,
