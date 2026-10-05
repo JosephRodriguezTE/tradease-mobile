@@ -295,31 +295,19 @@ export default function SubscriptionScreen() {
     load();
   }, []);
 
-  async function applyPlanChange(plan: string): Promise<boolean> {
+  // The only plan change a contractor can make themselves until payments are
+  // live. Writing contractors.plan directly is always rejected by the billing
+  // guard, so this goes through contractor_downgrade_to_free(), which also
+  // refuses while the team is over the Free plan's limit.
+  async function downgradeToFree(): Promise<boolean> {
     setUpgrading(true);
     try {
-      const { data:{ user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        Alert.alert('Update Failed', "Couldn't verify your session. Please sign in again and retry.");
+      const { error } = await supabase.rpc('contractor_downgrade_to_free');
+      if (error) {
+        Alert.alert('Plan not changed', error.message || "Couldn't switch you to Free. Please try again.");
         return false;
       }
-
-      const { data, error } = await supabase
-        .from('contractors')
-        .update({ plan })
-        .eq('id', user.id)
-        .select('plan')
-        .single();
-
-      // A DB-level guard silently reverts `plan` on some writes without
-      // raising an error, so a matched row with the wrong plan back is
-      // still a failure — only trust what the server says it stored.
-      if (error || !data || data.plan !== plan) {
-        Alert.alert('Update Failed', "Couldn't update your plan. Please try again.");
-        return false;
-      }
-
-      setCurrentPlan(data.plan);
+      setCurrentPlan('free');
       return true;
     } finally {
       setUpgrading(false);
@@ -336,7 +324,7 @@ export default function SubscriptionScreen() {
         [
           { text:'Cancel', style:'cancel' },
           { text:'Downgrade', style:'destructive', onPress: async () => {
-              const ok = await applyPlanChange('free');
+              const ok = await downgradeToFree();
               if (ok) {
                 Alert.alert('Plan Updated', 'You are now on the Free plan.');
               }
