@@ -9,6 +9,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { isValidInternalSecret } from '../_shared/internalSecret.ts'
 import { getServiceKey } from '../_shared/secretKey.ts'
+import { SUPPORT_EMAIL } from '../_shared/contact.ts'
 
 type EmailType =
   | 'booking_confirmation'
@@ -27,6 +28,8 @@ type EmailType =
   | 'launch_signup_confirmation'
   | 'payment_approved'
   | 'report_submitted'
+  | 'dispute_resolved'
+  | 'otp_code'
 
 // Postgres callers (send_email(), charge-customer) send `template` instead
 // of `type` and don't pass `subject` at all — DEFAULT_SUBJECTS below covers
@@ -51,6 +54,14 @@ interface EmailPayload {
 }
 
 const DEFAULT_SUBJECTS: Partial<Record<EmailType, string>> = {
+  booking_confirmation: 'Booking received',
+  contractor_accepted: 'A contractor accepted your job',
+  job_accepted: 'A contractor accepted your job',
+  job_cancelled: 'A booking was cancelled',
+  work_order_submitted: 'You have a new work order',
+  review_received: 'You got a new review',
+  dispute_resolved: 'Your dispute has been resolved',
+  otp_code: 'Your Tradease verification code',
   job_accepted_customer: 'A contractor accepted your job',
   job_accepted_contractor: 'You accepted a new job',
   job_completed: 'Your job is complete',
@@ -63,9 +74,9 @@ const DEFAULT_SUBJECTS: Partial<Record<EmailType, string>> = {
 }
 
 // Mail goes out from hello@tradease.tech; replies land in the support inbox.
-// Keep in step with SUPPORT_EMAIL (website lib/contact.ts, mobile
-// constants/contact.ts) and report_inbox() in the database.
-const REPLY_TO = 'support@tradease.tech'
+// Every email's reply-to and footer address come from SUPPORT_EMAIL
+// (../_shared/contact.ts) -- never write the address into a template.
+const REPLY_TO = SUPPORT_EMAIL
 
 const FROM = 'Tradease <hello@tradease.tech>'
 
@@ -151,15 +162,48 @@ async function sendViaResend(to: string, subject: string, html: string): Promise
   return true
 }
 
+// Subjects for queued emails, which (unlike direct callers) don't pass one.
 // The digest knows how many messages are still unread (claim_email_outbox()
 // counts them at send time).
 function subjectFor(type: EmailType, data: Record<string, unknown>): string | undefined {
-  if (type === 'new_message') {
-    const n = Number(data.unreadCount) || 1
-    const sender = String(data.senderName ?? 'Someone')
-    return n > 1 ? `${n} new messages from ${sender}` : `New message from ${sender}`
+  const trade = data.trade ? String(data.trade) : 'job'
+  switch (type) {
+    case 'new_message': {
+      const n = Number(data.unreadCount) || 1
+      const sender = String(data.senderName ?? 'Someone')
+      return n > 1 ? `${n} new messages from ${sender}` : `New message from ${sender}`
+    }
+    case 'booking_confirmation':
+      return `Booking received — ${trade}`
+    case 'job_completed':
+      return `${data.contractorName ?? 'Your contractor'} finished your ${trade} job — please review`
+    case 'job_cancelled':
+      return data.cancelledBy === 'contractor'
+        ? `Your contractor cancelled your ${trade} booking`
+        : `${data.customerName ?? 'The customer'} cancelled the ${trade} booking`
+    case 'work_order_submitted':
+      return `${data.contractorName ?? 'Your contractor'} sent you a work order`
+    case 'review_received':
+      return `You got a new ${clampRating(data.rating)}-star review`
+    case 'dispute_resolved':
+      return `Dispute resolved — your ${trade} job`
   }
   return (typeof data.subject === 'string' && data.subject) || DEFAULT_SUBJECTS[type]
+}
+
+function clampRating(value: unknown): number {
+  return Math.min(5, Math.max(1, Number(value) || 5))
+}
+
+// Customers are on Long Island, so deadlines are shown in Eastern time.
+function formatDeadline(value: unknown): string | null {
+  if (!value) return null
+  const d = new Date(String(value))
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    timeZone: 'America/New_York', timeZoneName: 'short',
+  })
 }
 
 interface OutboxRow {
@@ -239,7 +283,8 @@ function buildEmailHtml(payload: EmailPayload): string {
         <div style="background:#1A1A1A;border:1px solid #2E2E2E;border-radius:16px;padding:32px 28px;">
           ${content}
         </div>
-        <p style="font-size:12px;color:#555;margin-top:24px;text-align:center;">
+        <p style="font-size:12px;color:#555;margin-top:24px;text-align:center;line-height:1.6;">
+          Questions? Reply to this email or write to <a href="mailto:${SUPPORT_EMAIL}" style="color:#FF6200;text-decoration:none;">${SUPPORT_EMAIL}</a>.<br>
           © ${new Date().getFullYear()} Tradease · <a href="https://tradease.tech" style="color:#FF6200;text-decoration:none;">tradease.tech</a>
         </p>
       </div>
@@ -250,7 +295,7 @@ function buildEmailHtml(payload: EmailPayload): string {
   switch (type) {
     case 'booking_confirmation':
       return wrapper(`
-        <h1 style="font-size:22px;font-weight:800;margin:0 0 8px;color:#F0F0F0;">Booking Confirmed ✅</h1>
+        <h1 style="font-size:22px;font-weight:800;margin:0 0 8px;color:#F0F0F0;">Booking received ✅</h1>
         <p style="color:#9A9A9A;margin:0 0 24px;">Hi ${escapeHtml(data.customerName ?? 'there')}, your booking has been received.</p>
         <div style="background:#222;border:1px solid #2E2E2E;border-radius:10px;padding:16px 18px;margin-bottom:24px;">
           <p style="margin:0 0 8px;font-size:14px;"><strong>Trade:</strong> ${escapeHtml(data.trade ?? '—')}</p>
@@ -331,7 +376,7 @@ function buildEmailHtml(payload: EmailPayload): string {
           </table>
         </div>
         <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:10px;padding:12px 16px;margin-bottom:24px;">
-          <p style="margin:0;font-size:13px;color:#F59E0B;">⏱ Payment will auto-process in 24 hours if no action is taken.</p>
+          <p style="margin:0;font-size:13px;color:#F59E0B;">⏱ Please review it ${formatDeadline(data.autoApproveAt) ? `by ${escapeHtml(formatDeadline(data.autoApproveAt))}` : 'within 72 hours'}. If you don't respond by then, it's approved automatically.</p>
         </div>
         <a href="${escapeHtml(data.workOrderUrl ?? 'https://tradease.tech/dashboard')}" style="display:inline-block;background:#FF6200;color:#fff;text-decoration:none;border-radius:10px;padding:12px 24px;font-weight:700;font-size:14px;">
           Review &amp; Approve →
@@ -380,8 +425,10 @@ function buildEmailHtml(payload: EmailPayload): string {
     case 'job_cancelled':
       return wrapper(`
         <h1 style="font-size:22px;font-weight:800;margin:0 0 8px;color:#F0F0F0;">Booking Cancelled</h1>
-        <p style="color:#9A9A9A;margin:0 0 24px;">Your ${escapeHtml(data.trade ?? '')} booking has been cancelled. Visit your dashboard to post a new job.</p>
-        <a href="https://tradease.tech/dashboard" style="display:inline-block;background:#FF6200;color:#fff;text-decoration:none;border-radius:10px;padding:12px 24px;font-weight:700;font-size:14px;">
+        <p style="color:#9A9A9A;margin:0 0 24px;">${data.cancelledBy === 'contractor'
+          ? `${escapeHtml(data.contractorName ?? 'Your contractor')} cancelled your ${escapeHtml(data.trade ?? '')} booking. We're finding you a new contractor — check your bookings.`
+          : `${escapeHtml(data.customerName ?? 'The customer')} cancelled the ${escapeHtml(data.trade ?? '')} booking.`}</p>
+        <a href="${escapeHtml(data.bookingUrl ?? 'https://tradease.tech/dashboard')}" style="display:inline-block;background:#FF6200;color:#fff;text-decoration:none;border-radius:10px;padding:12px 24px;font-weight:700;font-size:14px;">
           View Dashboard →
         </a>
       `)
@@ -396,18 +443,18 @@ function buildEmailHtml(payload: EmailPayload): string {
               <td style="padding:5px 0;font-size:13px;color:#9A9A9A;width:90px;">Trade</td>
               <td style="padding:5px 0;font-size:13px;color:#F0F0F0;font-weight:600;">${escapeHtml(data.trade ?? '—')}</td>
             </tr>
-            <tr>
+            ${data.distance ? `<tr>
               <td style="padding:5px 0;font-size:13px;color:#9A9A9A;">Distance</td>
-              <td style="padding:5px 0;font-size:13px;color:#F0F0F0;font-weight:600;">${escapeHtml(data.distance ?? '—')}</td>
-            </tr>
+              <td style="padding:5px 0;font-size:13px;color:#F0F0F0;font-weight:600;">${escapeHtml(data.distance)}</td>
+            </tr>` : ''}
             <tr>
               <td style="padding:5px 0;font-size:13px;color:#9A9A9A;">Budget</td>
               <td style="padding:5px 0;font-size:13px;color:#22C55E;font-weight:700;">${escapeHtml(data.price ?? 'TBD')}</td>
             </tr>
-            ${data.jobAddress ? `
+            ${data.location ? `
             <tr>
               <td style="padding:5px 0;font-size:13px;color:#9A9A9A;">Location</td>
-              <td style="padding:5px 0;font-size:13px;color:#F0F0F0;">${escapeHtml(data.jobAddress)}</td>
+              <td style="padding:5px 0;font-size:13px;color:#F0F0F0;">${escapeHtml(data.location)}</td>
             </tr>` : ''}
           </table>
         </div>
@@ -484,6 +531,31 @@ function buildEmailHtml(payload: EmailPayload): string {
         <a href="${escapeHtml(data.adminUrl ?? 'https://tradease.tech/admin/reports')}" style="display:inline-block;background:#FF6200;color:#fff;text-decoration:none;border-radius:10px;padding:12px 24px;font-weight:700;font-size:14px;">
           Open in Admin →
         </a>
+      `)
+
+    case 'dispute_resolved':
+      return wrapper(`
+        <h1 style="font-size:22px;font-weight:800;margin:0 0 8px;color:#F0F0F0;">Dispute resolved</h1>
+        <p style="color:#9A9A9A;margin:0 0 20px;">The dispute on your ${escapeHtml(data.trade ?? '')} job has been resolved ${escapeHtml(data.outcome ?? '')}.</p>
+        ${data.resolution ? `
+          <div style="background:#222;border:1px solid #2E2E2E;border-radius:10px;padding:16px 18px;margin-bottom:24px;">
+            <p style="margin:0;font-size:14px;color:#9A9A9A;"><strong style="color:#F0F0F0;">From our team:</strong><br>${escapeHtml(data.resolution)}</p>
+          </div>
+        ` : ''}
+        <a href="${escapeHtml(data.bookingUrl ?? 'https://tradease.tech/dashboard')}" style="display:inline-block;background:#FF6200;color:#fff;text-decoration:none;border-radius:10px;padding:12px 24px;font-weight:700;font-size:14px;">
+          View Job →
+        </a>
+      `)
+
+    // Sent directly (not queued) by the website's /api/2fa/send.
+    case 'otp_code':
+      return wrapper(`
+        <h1 style="font-size:22px;font-weight:800;margin:0 0 8px;color:#F0F0F0;">Your verification code</h1>
+        <p style="color:#9A9A9A;margin:0 0 20px;">Enter this code to finish signing in to Tradease.</p>
+        <div style="background:#222;border:1px solid #2E2E2E;border-radius:10px;padding:18px;margin-bottom:20px;text-align:center;">
+          <span style="font-size:32px;font-weight:800;letter-spacing:8px;color:#F0F0F0;">${escapeHtml(data.code ?? '')}</span>
+        </div>
+        <p style="color:#9A9A9A;font-size:13px;margin:0;">It expires in ${escapeHtml(data.expiresInMinutes ?? 10)} minutes. Never share it — Tradease will never ask you for it. If you didn't try to sign in, change your password.</p>
       `)
 
     default:
