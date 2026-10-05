@@ -74,6 +74,6 @@ test('failed deactivate: alert with the reason', async () => {
 test('successful deactivate: no error alert', async () => {
   mockUpdate.mockResolvedValue({ error: null });
   await deactivateJane();
-  expect(mockUpdate).toHaveBeenCalledWith({ status: 'inactive' });
+  expect(mockUpdate).toHaveBeenCalledWith({ status: 'removed' }); // the value contractor_employees_status_check accepts
   expect(alertSpy).toHaveBeenCalledTimes(1); // just the confirm dialog
 });

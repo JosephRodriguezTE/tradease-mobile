@@ -20,7 +20,7 @@ interface Employee {
   full_name: string;
   email: string;
   role: string;
-  status: 'active' | 'pending' | 'inactive';
+  status: 'invited' | 'active' | 'suspended' | 'removed';
   can_accept_jobs: boolean;
   can_message_customers: boolean;
   can_manage_employees: boolean;
@@ -37,6 +37,15 @@ interface TeamSummary {
 }
 
 const ROLES = ['Field Tech', 'Admin', 'Dispatcher', 'Estimator'];
+// contractor_employees stores role as field_tech/admin/... and status as
+// invited/active/suspended/removed; the form used to send the labels and
+// "pending"/"inactive", so every invite and deactivation failed. Write the
+// stored value, show the label.
+const ROLE_VALUE: Record<string, string> = {
+  'Field Tech': 'field_tech', 'Admin': 'admin', 'Dispatcher': 'dispatcher', 'Estimator': 'estimator',
+};
+const roleLabel = (value: string | null | undefined) =>
+  Object.keys(ROLE_VALUE).find(label => ROLE_VALUE[label] === value) ?? 'Field Tech';
 
 const ROLE_COLORS: Record<string, string> = {
   'Field Tech':  '#38BDF8',
@@ -150,8 +159,8 @@ export default function EmployeesScreen() {
       contractor_id:          contractorId,
       email,
       full_name:              name,
-      role:                   inviteRole,
-      status:                 'pending',
+      role:                   ROLE_VALUE[inviteRole] ?? 'field_tech',
+      status:                 'invited',
       invite_token:           token,
       can_accept_jobs:        inviteRole === 'Field Tech' || inviteRole === 'Dispatcher',
       can_message_customers:  true,
@@ -190,7 +199,7 @@ export default function EmployeesScreen() {
         { text: 'Cancel', style: 'cancel' },
         { text: 'Deactivate', style: 'destructive', onPress: async () => {
           setActionTarget(null);
-          const { error } = await supabase.from('contractor_employees').update({ status: 'inactive' }).eq('id', emp.id);
+          const { error } = await supabase.from('contractor_employees').update({ status: 'removed' }).eq('id', emp.id);
           if (error) Alert.alert('Not deactivated', `${emp.full_name} still has access: ${error.message}`);
           load();
         }},
@@ -235,7 +244,7 @@ export default function EmployeesScreen() {
   }
 
   const activeMembers  = employees.filter(e => e.status === 'active');
-  const pendingInvites = employees.filter(e => e.status === 'pending');
+  const pendingInvites = employees.filter(e => e.status === 'invited');
   const limit          = planLimit ?? 3;
   const used           = teamSummary?.total_used ?? 0;
   const isUnlimited    = limit === -1 || limit >= 999;
@@ -309,8 +318,8 @@ export default function EmployeesScreen() {
           </View>
         )}
         renderItem={({ item, index }) => {
-          const isFirstPending = item.status === 'pending' && (index === 0 || employees.filter(e => e.status === 'pending')[0]?.id === item.id);
-          const roleColor = ROLE_COLORS[item.role] ?? C.orange;
+          const isFirstPending = item.status === 'invited' && (index === 0 || employees.filter(e => e.status === 'invited')[0]?.id === item.id);
+          const roleColor = ROLE_COLORS[roleLabel(item.role)] ?? C.orange;
           return (
             <>
               {isFirstPending && (
@@ -330,24 +339,24 @@ export default function EmployeesScreen() {
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Text style={[s.empName, { color: C.textPrimary }]}>{item.full_name}</Text>
-                    <View style={[s.statusDot, { backgroundColor: item.status === 'active' ? '#22C55E' : item.status === 'pending' ? '#FBBF24' : C.textMuted }]} />
+                    <View style={[s.statusDot, { backgroundColor: item.status === 'active' ? '#22C55E' : item.status === 'invited' ? '#FBBF24' : C.textMuted }]} />
                   </View>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                     <View style={[s.rolePill, { backgroundColor: roleColor + '18' }]}>
-                      <Text style={[s.rolePillText, { color: roleColor }]}>{item.role}</Text>
+                      <Text style={[s.rolePillText, { color: roleColor }]}>{roleLabel(item.role)}</Text>
                     </View>
                     {item.status === 'active' && (
                       <Text style={[s.metaText, { color: C.textMuted }]}>
                         {item.jobs_completed} jobs · Active {timeSince(item.last_active_at)}
                       </Text>
                     )}
-                    {item.status === 'pending' && (
+                    {item.status === 'invited' && (
                       <Text style={[s.metaText, { color: '#FBBF24' }]}>
                         Invited {timeSince(item.invited_at)}
                       </Text>
                     )}
                   </View>
-                  {item.status === 'pending' && (
+                  {item.status === 'invited' && (
                     <Text style={[s.metaText, { color: C.textSecondary, marginTop: 2 }]} numberOfLines={1}>
                       {item.email}
                     </Text>
@@ -463,11 +472,11 @@ export default function EmployeesScreen() {
         <TouchableOpacity style={s.actionBackdrop} activeOpacity={1} onPress={() => setActionTarget(null)}>
           <View style={[s.actionSheet, { backgroundColor: C.surface, borderColor: C.border }]}>
             <Text style={[s.actionName, { color: C.textPrimary }]}>{actionTarget?.full_name}</Text>
-            <Text style={[s.actionRole, { color: C.textMuted }]}>{actionTarget?.role} · {actionTarget?.status}</Text>
+            <Text style={[s.actionRole, { color: C.textMuted }]}>{roleLabel(actionTarget?.role)} · {actionTarget?.status}</Text>
 
             <View style={[s.actionDivider, { backgroundColor: C.border }]} />
 
-            {actionTarget?.status === 'pending' && (
+            {actionTarget?.status === 'invited' && (
               <>
                 <TouchableOpacity style={s.actionItem} onPress={() => actionTarget && handleResendInvite(actionTarget)}>
                   <Ionicons name="refresh-outline" size={18} color={C.orange} />

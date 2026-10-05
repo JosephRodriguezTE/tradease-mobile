@@ -16,6 +16,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Font, Radius } from '../../constants/theme';
 
+// Stored role values (contractor_employees_role_check) -> display labels.
+const ROLE_LABEL: Record<string, string> = { field_tech: 'Field Tech', admin: 'Admin', dispatcher: 'Dispatcher', estimator: 'Estimator' };
+const roleLabel = (value: string | null | undefined) => (value && ROLE_LABEL[value]) || 'Field Tech';
+
 export default function InviteScreen() {
   const { token } = useLocalSearchParams<{ token: string }>();
   const { colors: C } = useTheme();
@@ -53,7 +57,7 @@ export default function InviteScreen() {
       return;
     }
 
-    if (data.status === 'inactive') {
+    if (data.status === 'removed' || data.status === 'suspended') {
       setError('This invite has been deactivated by the company admin.');
       setLoading(false);
       return;
@@ -133,7 +137,7 @@ export default function InviteScreen() {
 
     Alert.alert(
       `Welcome to ${contractor?.company_name ?? 'the team'}!`,
-      `You've joined as ${invite.full_name} (${invite.role}). You can now access jobs and messages through the app.`,
+      `You've joined as ${invite.full_name} (${roleLabel(invite.role)}). You can now access jobs and messages through the app.`,
       [{ text: 'Get Started', onPress: () => router.replace('/(tabs)') }],
     );
   }
@@ -210,7 +214,7 @@ export default function InviteScreen() {
           <View style={s.cardRow}>
             <Ionicons name="person-outline" size={16} color={C.orange} />
             <Text style={[s.cardLabel, { color: C.textMuted }]}>Your Role</Text>
-            <Text style={[s.cardValue, { color: C.orange, fontWeight: Font.black }]}>{invite?.role}</Text>
+            <Text style={[s.cardValue, { color: C.orange, fontWeight: Font.black }]}>{roleLabel(invite?.role)}</Text>
           </View>
         </View>
 
